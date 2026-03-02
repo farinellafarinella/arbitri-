@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arena (Offline)</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1 id="arenaTitle">Arena</h1>
+          <p id="arenaStatus">Stato: —</p>
+        </div>
+        <div id="connectionStatus" class="status ok">Locale</div>
+      </header>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="card">
+            <h2>Arbitro assegnato</h2>
+            <div id="assignedReferee" class="muted">—</div>
+            <div class="muted">Tempo chiamata: <span id="countdown">—</span></div>
+          </div>
+
+          <div class="card">
+            <h2>Controllo partita</h2>
+            <div class="row">
+              <button id="startMatchBtn" disabled>Inizia partita</button>
+            </div>
+            <div class="row">
+              <input id="winnerInput" placeholder="Vincitore" />
+              <button id="setWinnerBtn" disabled>Imposta vincitore</button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+
+    <script src="firebase-config.js?v=20260302"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="state.js?v=20260302"></script>
+    <script src="status.js?v=20260302"></script>
+    <script src="arena.js?v=20260302"></script>
+  </body>
+</html>
