@@ -19,6 +19,11 @@
       <section class="grid">
         <div class="panel">
           <div class="card">
+            <h2>Stato Arena</h2>
+            <div id="arenaBadge" class="badge">—</div>
+          </div>
+
+          <div class="card">
             <h2>Arbitro assegnato</h2>
             <div id="assignedReferee" class="muted">—</div>
             <div class="muted">Tempo chiamata: <span id="countdown">—</span></div>
@@ -30,9 +35,14 @@
               <button id="startMatchBtn" disabled>Inizia partita</button>
             </div>
             <div class="row">
-              <input id="winnerInput" placeholder="Vincitore" />
-              <button id="setWinnerBtn" disabled>Imposta vincitore</button>
+              <div id="winnerOptions" class="winner-options"></div>
+              <button id="confirmWinnerBtn" disabled>Conferma vincitore</button>
             </div>
+          </div>
+
+          <div class="card">
+            <h2>Match attuale</h2>
+            <div class="muted"><span id="matchDisplay">—</span></div>
           </div>
         </div>
 
