@@ -8,6 +8,11 @@ const refereeSelect = document.getElementById("refereeSelect");
 const assignBtn = document.getElementById("assignBtn");
 const arenaList = document.getElementById("arenaList");
 const tournamentTitle = document.getElementById("tournamentTitle");
+const matchArenaSelect = document.getElementById("matchArenaSelect");
+const player1Input = document.getElementById("player1Input");
+const player2Input = document.getElementById("player2Input");
+const setMatchBtn = document.getElementById("setMatchBtn");
+const matchMessage = document.getElementById("matchMessage");
 
 let state = loadState();
 const params = new URLSearchParams(window.location.search);
@@ -23,12 +28,18 @@ function render() {
 
   tournamentTitle.textContent = tournament.name;
   arenaSelect.innerHTML = "";
+  matchArenaSelect.innerHTML = "";
 
   tournament.arenas.forEach((arena) => {
     const option = document.createElement("option");
     option.value = arena.id;
     option.textContent = arena.name;
     arenaSelect.appendChild(option);
+
+    const matchOption = document.createElement("option");
+    matchOption.value = arena.id;
+    matchOption.textContent = arena.name;
+    matchArenaSelect.appendChild(matchOption);
   });
 
   refereeSelect.innerHTML = "";
@@ -57,6 +68,7 @@ function render() {
         <strong>${arena.name}</strong>
         <div class="muted">Arbitro: <span class="referee-name">${arena.refereeName || "—"}</span></div>
         <div class="muted">Vincitore: <span class="winner-name">${arena.winnerCandidate || "—"}</span></div>
+        <div class="muted">Match: ${arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "—"}</div>
       </div>
       <div class="badge ${arena.status}">${statusLabel(arena.status)}</div>
       <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" ? "" : "disabled"}>Chiama arena</button>
@@ -97,6 +109,28 @@ assignBtn.addEventListener("click", () => {
   render();
 });
 
+setMatchBtn.addEventListener("click", () => {
+  const arenaId = matchArenaSelect.value;
+  if (!arenaId || !tournament) return;
+  const arena = tournament.arenas.find((a) => a.id === arenaId);
+  if (!arena) return;
+  if (arena.status !== "free" || arena.match) {
+    matchMessage.textContent = `${arena.name} ha gia un match assegnato.`;
+    matchMessage.classList.add("error");
+    return;
+  }
+  const p1 = player1Input.value.trim();
+  const p2 = player2Input.value.trim();
+  if (!p1 || !p2) return;
+  matchMessage.textContent = "";
+  matchMessage.classList.remove("error");
+  arena.match = { p1, p2 };
+  saveState(state);
+  render();
+  player1Input.value = "";
+  player2Input.value = "";
+});
+
 arenaList.addEventListener("click", (event) => {
   const target = event.target;
   if (target.classList.contains("call-btn")) {
@@ -118,6 +152,8 @@ arenaList.addEventListener("click", (event) => {
   arena.winnerCandidate = "";
   arena.status = "free";
   arena.calledAt = null;
+  arena.match = null;
+  arena.selectedWinner = "";
   saveState(state);
   render();
 });
@@ -143,5 +179,6 @@ if (!isOnlineMode()) {
 function statusLabel(status) {
   if (status === "called") return "Chiamata";
   if (status === "occupied") return "Occupata";
+  if (status === "standby") return "In attesa";
   return "Libera";
 }
