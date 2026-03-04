@@ -1,10 +1,12 @@
 const arenaTitle = document.getElementById("arenaTitle");
 const arenaStatus = document.getElementById("arenaStatus");
+const arenaBadge = document.getElementById("arenaBadge");
 const assignedReferee = document.getElementById("assignedReferee");
 const startMatchBtn = document.getElementById("startMatchBtn");
-const winnerInput = document.getElementById("winnerInput");
-const setWinnerBtn = document.getElementById("setWinnerBtn");
+const winnerOptions = document.getElementById("winnerOptions");
+const confirmWinnerBtn = document.getElementById("confirmWinnerBtn");
 const countdownEl = document.getElementById("countdown");
+const matchDisplay = document.getElementById("matchDisplay");
 
 const params = new URLSearchParams(window.location.search);
 const arenaId = params.get("id");
@@ -24,11 +26,16 @@ function updateArenaUI() {
 
   arenaTitle.textContent = currentArena.name;
   arenaStatus.textContent = `Stato: ${statusLabel(currentArena.status)}`;
+  arenaBadge.textContent = statusLabel(currentArena.status);
+  arenaBadge.className = `badge ${currentArena.status}`;
   assignedReferee.textContent = currentArena.refereeName || "Nessun arbitro assegnato";
   const enabled = Boolean(currentArena.refereeName);
   const canStart = currentArena.status === "called" && timeLeftMs() > 0;
   startMatchBtn.disabled = !enabled || !canStart;
-  setWinnerBtn.disabled = !enabled || currentArena.status !== "occupied";
+  const hasMatch = currentArena.match && currentArena.match.p1 && currentArena.match.p2;
+  confirmWinnerBtn.disabled = !enabled || currentArena.status !== "occupied" || !hasMatch || !currentArena.selectedWinner;
+  renderWinnerOptions();
+  matchDisplay.textContent = hasMatch ? `${currentArena.match.p1} vs ${currentArena.match.p2}` : "—";
   updateCountdown();
 }
 
@@ -53,15 +60,17 @@ startMatchBtn.addEventListener("click", () => {
   saveArena();
 });
 
-setWinnerBtn.addEventListener("click", () => {
+confirmWinnerBtn.addEventListener("click", () => {
   if (!currentArena) return;
   if (!currentArena.refereeName) return;
   if (currentArena.status !== "occupied") return;
-  const winner = winnerInput.value.trim();
+  const winner = currentArena.selectedWinner;
   if (!winner) return;
   currentArena.winnerCandidate = winner;
+  currentArena.status = "standby";
+  currentArena.selectedWinner = "";
+  currentArena.match = null;
   saveArena();
-  winnerInput.value = "";
 });
 
 function saveArena() {
@@ -134,5 +143,25 @@ function updateCountdown() {
 function statusLabel(status) {
   if (status === "called") return "Chiamata";
   if (status === "occupied") return "Occupata";
+  if (status === "standby") return "In attesa";
   return "Libera";
+}
+
+function renderWinnerOptions() {
+  winnerOptions.innerHTML = "";
+  if (!currentArena || !currentArena.match) {
+    return;
+  }
+  const options = [currentArena.match.p1, currentArena.match.p2].filter(Boolean);
+  options.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `winner-btn ${currentArena.selectedWinner === name ? "active" : ""}`;
+    btn.textContent = name;
+    btn.addEventListener("click", () => {
+      currentArena.selectedWinner = name;
+      updateArenaUI();
+    });
+    winnerOptions.appendChild(btn);
+  });
 }
