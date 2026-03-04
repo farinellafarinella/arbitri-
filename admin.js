@@ -71,7 +71,7 @@ function render() {
         <div class="muted">Match: ${arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "—"}</div>
       </div>
       <div class="badge ${arena.status}">${statusLabel(arena.status)}</div>
-      <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" ? "" : "disabled"}>Chiama arena</button>
+      <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" && arena.match ? "" : "disabled"}>Chiama arena</button>
       <button class="confirm-btn" data-id="${arena.id}" ${arena.winnerCandidate ? "" : "disabled"}>Segna vincitore</button>
       <a class="arena-link" href="arena.html?tid=${tournament.id}&id=${arena.id}" target="_blank" rel="noopener">Apri pagina</a>
     `;
@@ -137,7 +137,7 @@ arenaList.addEventListener("click", (event) => {
     const arenaId = target.dataset.id;
     if (!tournament) return;
     const arena = tournament.arenas.find((a) => a.id === arenaId);
-    if (!arena || arena.status !== "free") return;
+    if (!arena || arena.status !== "free" || !arena.match) return;
     arena.status = "called";
     arena.calledAt = Date.now();
     saveState(state);
