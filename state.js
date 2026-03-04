@@ -77,7 +77,9 @@ function createArena(name) {
     refereeName: "",
     winnerCandidate: "",
     lastWinner: "",
-    calledAt: null
+    calledAt: null,
+    match: null,
+    selectedWinner: ""
   };
 }
 
@@ -111,7 +113,9 @@ function normalizeArena(arena) {
     refereeName: arena.refereeName || "",
     winnerCandidate: arena.winnerCandidate || "",
     lastWinner: arena.lastWinner || arena.winner || "",
-    calledAt: arena.calledAt || null
+    calledAt: arena.calledAt || null,
+    match: arena.match || null,
+    selectedWinner: arena.selectedWinner || ""
   };
 }
 
