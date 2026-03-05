@@ -13,6 +13,12 @@ const player1Input = document.getElementById("player1Input");
 const player2Input = document.getElementById("player2Input");
 const setMatchBtn = document.getElementById("setMatchBtn");
 const matchMessage = document.getElementById("matchMessage");
+const playersFile = document.getElementById("playersFile");
+const importPlayersBtn = document.getElementById("importPlayersBtn");
+const clearPlayersBtn = document.getElementById("clearPlayersBtn");
+const playersCount = document.getElementById("playersCount");
+const playersListView = document.getElementById("playersListView");
+const playersList = document.getElementById("playersList");
 
 let state = loadState();
 const params = new URLSearchParams(window.location.search);
@@ -77,6 +83,8 @@ function render() {
     `;
     arenaList.appendChild(row);
   });
+
+  renderPlayers();
 }
 
 addArenaBtn.addEventListener("click", () => {
@@ -131,6 +139,37 @@ setMatchBtn.addEventListener("click", () => {
   player2Input.value = "";
 });
 
+importPlayersBtn.addEventListener("click", () => {
+  if (!tournament) return;
+  const file = playersFile.files && playersFile.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || "");
+    const names = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (!tournament.players) tournament.players = [];
+    names.forEach((name) => {
+      if (!tournament.players.includes(name)) tournament.players.push(name);
+    });
+    saveState(state);
+    render();
+    playersFile.value = "";
+  };
+  reader.readAsText(file);
+});
+
+clearPlayersBtn.addEventListener("click", () => {
+  if (!tournament) return;
+  const ok = window.confirm("Svuotare la lista giocatori?");
+  if (!ok) return;
+  tournament.players = [];
+  saveState(state);
+  render();
+});
+
 arenaList.addEventListener("click", (event) => {
   const target = event.target;
   if (target.classList.contains("call-btn")) {
@@ -181,4 +220,22 @@ function statusLabel(status) {
   if (status === "occupied") return "Occupata";
   if (status === "standby") return "In attesa";
   return "Libera";
+}
+
+function renderPlayers() {
+  if (!tournament) return;
+  const list = tournament.players || [];
+  playersCount.textContent = `Totale giocatori: ${list.length}`;
+  playersListView.innerHTML = "";
+  playersList.innerHTML = "";
+  list.forEach((name) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    row.textContent = name;
+    playersListView.appendChild(row);
+
+    const opt = document.createElement("option");
+    opt.value = name;
+    playersList.appendChild(opt);
+  });
 }
