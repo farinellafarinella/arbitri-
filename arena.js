@@ -11,6 +11,7 @@ const matchDisplay = document.getElementById("matchDisplay");
 const params = new URLSearchParams(window.location.search);
 const arenaId = params.get("id");
 const tournamentId = params.get("tid");
+const backToAdmin = document.getElementById("backToAdmin");
 let state = loadState();
 let currentArena = null;
 let tournament = null;
@@ -100,6 +101,10 @@ if (!arenaId) {
   setWinnerBtn.disabled = true;
 } else {
   loadArena();
+}
+
+if (backToAdmin) {
+  backToAdmin.href = tournamentId ? `tournament.html?id=${tournamentId}` : "index.html";
 }
 
 if (!isOnlineMode()) {
