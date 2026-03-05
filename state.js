@@ -60,10 +60,12 @@ function subscribeState(callback) {
   });
 }
 
-function createTournament(name) {
+function createTournament(name, challongeUrl = "") {
   return {
     id: `tournament-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     name,
+    challongeUrl,
+    players: [],
     arenas: [],
     referees: []
   };
@@ -100,6 +102,8 @@ function normalizeTournament(tournament) {
   return {
     id: tournament.id,
     name: tournament.name,
+    challongeUrl: tournament.challongeUrl || "",
+    players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
     referees: tournament.referees || []
   };
