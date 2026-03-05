@@ -76,6 +76,11 @@ p {
   gap: 16px;
 }
 
+.panel .list {
+  max-height: 320px;
+  overflow: auto;
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
