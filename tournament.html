@@ -53,11 +53,12 @@
             <div class="muted">Puoi caricare solo se l'arena è libera e senza match.</div>
             <div class="row">
               <select id="matchArenaSelect"></select>
-              <input id="player1Input" placeholder="Nome giocatore 1" />
-              <input id="player2Input" placeholder="Nome giocatore 2" />
+              <input id="player1Input" placeholder="Nome giocatore 1" list="playersList" />
+              <input id="player2Input" placeholder="Nome giocatore 2" list="playersList" />
               <button id="setMatchBtn">Carica</button>
             </div>
             <div id="matchMessage" class="muted"></div>
+            <datalist id="playersList"></datalist>
           </div>
         </div>
 
@@ -71,6 +72,20 @@
             <h2>Conferma Vincitore</h2>
             <p class="muted">Quando l'arbitro inserisce il vincitore, qui puoi segnare il risultato e liberare l'arena.</p>
           </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="card">
+          <h2>Giocatori</h2>
+          <div class="muted">Importa CSV con una colonna (un nome per riga).</div>
+          <div class="row">
+            <input id="playersFile" type="file" accept=".csv,text/csv" />
+            <button id="importPlayersBtn">Importa</button>
+            <button id="clearPlayersBtn">Svuota</button>
+          </div>
+          <div id="playersCount" class="muted"></div>
+          <div id="playersListView" class="list"></div>
         </div>
       </section>
     </div>
