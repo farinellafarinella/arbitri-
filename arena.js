@@ -1,177 +1,72 @@
-const arenaTitle = document.getElementById("arenaTitle");
-const arenaStatus = document.getElementById("arenaStatus");
-const arenaBadge = document.getElementById("arenaBadge");
-const assignedReferee = document.getElementById("assignedReferee");
-const startMatchBtn = document.getElementById("startMatchBtn");
-const winnerOptions = document.getElementById("winnerOptions");
-const confirmWinnerBtn = document.getElementById("confirmWinnerBtn");
-const countdownEl = document.getElementById("countdown");
-const matchDisplay = document.getElementById("matchDisplay");
-const coinPageBtn = document.getElementById("coinPageBtn");
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arena (Offline)</title>
+    <link rel="apple-touch-icon" href="icon.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1 id="arenaTitle">Arena</h1>
+          <p id="arenaStatus">Stato: —</p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <a class="arena-link" id="backToAdmin" href="index.html">← Admin</a>
+          <div id="connectionStatus" class="status ok">Locale</div>
+        </div>
+      </header>
 
-const params = new URLSearchParams(window.location.search);
-const arenaId = params.get("id");
-const tournamentId = params.get("tid");
-const backToAdmin = document.getElementById("backToAdmin");
-let state = loadState();
-let currentArena = null;
-let tournament = null;
+      <section class="grid">
+        <div class="panel">
+          <div class="card">
+            <h2>Stato Arena</h2>
+            <div id="arenaBadge" class="badge">—</div>
+          </div>
 
-function updateArenaUI() {
-  if (!currentArena) {
-    arenaTitle.textContent = "Arena non trovata";
-    arenaStatus.textContent = "Stato: —";
-    assignedReferee.textContent = "—";
-    countdownEl.textContent = "—";
-    return;
-  }
+          <div class="card">
+            <h2>Arbitro assegnato</h2>
+            <div id="assignedReferee" class="muted">—</div>
+            <div class="muted">Tempo chiamata: <span id="countdown">—</span></div>
+          </div>
 
-  arenaTitle.textContent = currentArena.name;
-  arenaStatus.textContent = `Stato: ${statusLabel(currentArena.status)}`;
-  arenaBadge.textContent = statusLabel(currentArena.status);
-  arenaBadge.className = `badge ${currentArena.status}`;
-  assignedReferee.textContent = currentArena.refereeName || "Nessun arbitro assegnato";
-  const enabled = Boolean(currentArena.refereeName);
-  const canStart = currentArena.status === "called" && timeLeftMs() > 0;
-  startMatchBtn.disabled = !enabled || !canStart;
-  const hasMatch = currentArena.match && currentArena.match.p1 && currentArena.match.p2;
-  confirmWinnerBtn.disabled = !enabled || currentArena.status !== "occupied" || !hasMatch || !currentArena.selectedWinner;
-  renderWinnerOptions();
-  matchDisplay.textContent = hasMatch ? `${currentArena.match.p1} vs ${currentArena.match.p2}` : "—";
-  updateCountdown();
-}
+          <div class="card">
+            <h2>Controllo partita</h2>
+            <div class="row">
+              <button id="startMatchBtn" disabled>Inizia partita</button>
+            </div>
+            <div class="row">
+              <div id="winnerOptions" class="winner-options"></div>
+              <button id="confirmWinnerBtn" disabled>Conferma vincitore</button>
+            </div>
+          </div>
 
-function loadArena() {
-  state = loadState();
-  tournament = findTournament(state, tournamentId);
-  if (!tournament) {
-    currentArena = null;
-  } else {
-    currentArena = tournament.arenas.find((a) => a.id === arenaId) || null;
-  }
-  updateArenaUI();
-}
+          <div class="card">
+            <h2>Match attuale</h2>
+            <div class="muted"><span id="matchDisplay">—</span></div>
+          </div>
 
-startMatchBtn.addEventListener("click", () => {
-  if (!currentArena) return;
-  if (!currentArena.refereeName) return;
-  if (currentArena.status !== "called") return;
-  if (timeLeftMs() <= 0) return;
-  currentArena.status = "occupied";
-  currentArena.calledAt = null;
-  saveArena();
-});
+          <div class="card">
+            <h2>Sorteggio (testa o croce)</h2>
+            <div class="row">
+              <a id="coinPageBtn" class="arena-link" href="coin.html">Apri sorteggio</a>
+            </div>
+          </div>
+        </div>
 
-confirmWinnerBtn.addEventListener("click", () => {
-  if (!currentArena) return;
-  if (!currentArena.refereeName) return;
-  if (currentArena.status !== "occupied") return;
-  const winner = currentArena.selectedWinner;
-  if (!winner) return;
-  currentArena.winnerCandidate = winner;
-  currentArena.status = "standby";
-  currentArena.selectedWinner = "";
-  currentArena.match = null;
-  saveArena();
-});
+      </section>
+    </div>
 
-
-function saveArena() {
-  if (!tournament) return;
-  const index = tournament.arenas.findIndex((a) => a.id === currentArena.id);
-  if (index !== -1) {
-    tournament.arenas[index] = currentArena;
-  }
-  normalizeState(state);
-  saveState(state);
-  updateArenaUI();
-}
-
-subscribeState((newState) => {
-  state = newState;
-  tournament = findTournament(state, tournamentId);
-  const updated = tournament ? tournament.arenas.find((a) => a.id === arenaId) : null;
-  if (updated) {
-    currentArena = updated;
-    updateArenaUI();
-  }
-});
-
-  if (!arenaId) {
-    arenaTitle.textContent = "Arena non trovata";
-    startMatchBtn.disabled = true;
-    confirmWinnerBtn.disabled = true;
-  } else {
-    loadArena();
-  }
-
-if (backToAdmin) {
-  backToAdmin.href = tournamentId ? `tournament.html?id=${tournamentId}` : "index.html";
-}
-
-if (!isOnlineMode()) {
-  setInterval(() => {
-    if (!currentArena) return;
-    state = loadState();
-    tournament = findTournament(state, tournamentId);
-    const updated = tournament ? tournament.arenas.find((a) => a.id === arenaId) : null;
-    if (updated) {
-      currentArena = updated;
-      const changed = expireCalls(state);
-      if (changed) saveState(state);
-      updateArenaUI();
-    }
-  }, 1000);
-} else {
-  setInterval(() => {
-    if (!currentArena) return;
-    updateArenaUI();
-  }, 1000);
-}
-
-function timeLeftMs() {
-  if (!currentArena || currentArena.status !== "called" || !currentArena.calledAt) return 0;
-  const remaining = currentArena.calledAt + callWindowMs() - Date.now();
-  return Math.max(0, remaining);
-}
-
-function updateCountdown() {
-  if (!currentArena || currentArena.status !== "called" || !currentArena.calledAt) {
-    countdownEl.textContent = "—";
-    return;
-  }
-  const remaining = timeLeftMs();
-  const totalSeconds = Math.ceil(remaining / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  countdownEl.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function statusLabel(status) {
-  if (status === "called") return "Chiamata";
-  if (status === "occupied") return "Occupata";
-  if (status === "standby") return "In attesa";
-  return "Libera";
-}
-
-function renderWinnerOptions() {
-  winnerOptions.innerHTML = "";
-  if (!currentArena || !currentArena.match) return;
-  const options = [currentArena.match.p1, currentArena.match.p2].filter(Boolean);
-  options.forEach((name) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `winner-btn ${currentArena.selectedWinner === name ? "active" : ""}`;
-    btn.textContent = name;
-    btn.addEventListener("click", () => {
-      currentArena.selectedWinner = name;
-      updateArenaUI();
-    });
-    winnerOptions.appendChild(btn);
-  });
-}
-
-
-if (coinPageBtn) {
-  coinPageBtn.href = tournamentId ? `coin.html?tid=${tournamentId}&id=${arenaId}` : "coin.html";
-}
+    <script src="firebase-config.js?v=20260302"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="state.js?v=20260302"></script>
+    <script src="status.js?v=20260302"></script>
+    <script src="arena.js?v=20260302"></script>
+    <script src="register-sw.js"></script>
+  </body>
+</html>
