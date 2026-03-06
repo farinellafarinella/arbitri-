@@ -81,7 +81,8 @@ function createArena(name) {
     lastWinner: "",
     calledAt: null,
     match: null,
-    selectedWinner: ""
+    selectedWinner: "",
+    coinTossResult: ""
   };
 }
 
@@ -119,7 +120,8 @@ function normalizeArena(arena) {
     lastWinner: arena.lastWinner || arena.winner || "",
     calledAt: arena.calledAt || null,
     match: arena.match || null,
-    selectedWinner: arena.selectedWinner || ""
+    selectedWinner: arena.selectedWinner || "",
+    coinTossResult: arena.coinTossResult || ""
   };
 }
 
