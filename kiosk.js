@@ -1,11 +1,14 @@
 const kioskTitle = document.getElementById("kioskTitle");
 const kioskGrid = document.getElementById("kioskGrid");
+const kioskBanner = document.getElementById("kioskBanner");
 
 const params = new URLSearchParams(window.location.search);
 const tournamentId = params.get("tid");
 
 let state = loadState();
 let tournament = findTournament(state, tournamentId);
+let previousArenas = new Map();
+let bannerTimer = null;
 
 function render() {
   if (!tournament) {
@@ -18,6 +21,21 @@ function render() {
   kioskGrid.innerHTML = "";
 
   tournament.arenas.forEach((arena) => {
+    const prev = previousArenas.get(arena.id);
+    if (prev) {
+      if (prev.status !== "called" && arena.status === "called") {
+        showBanner(
+          `Arena chiamata: ${arena.name}`,
+          arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Match non disponibile"
+        );
+      }
+      if (prev.refereeName && arena.refereeName && prev.refereeName !== arena.refereeName) {
+        showBanner(
+          `Cambio arbitro in corso - ${arena.name}`,
+          `${prev.refereeName} → ${arena.refereeName}`
+        );
+      }
+    }
     const card = document.createElement("div");
     card.className = `kiosk-card ${arena.status}`;
     const matchHtml = arena.match
@@ -47,6 +65,7 @@ function render() {
       </div>
     `;
     kioskGrid.appendChild(card);
+    previousArenas.set(arena.id, { status: arena.status, refereeName: arena.refereeName });
   });
 }
 
@@ -55,6 +74,21 @@ function statusLabel(status) {
   if (status === "occupied") return "Occupata";
   if (status === "standby") return "In attesa";
   return "Libera";
+}
+
+function showBanner(title, subtitle) {
+  if (!kioskBanner) return;
+  kioskBanner.innerHTML = `
+    <div class="kiosk-banner-title">${title}</div>
+    <div class="kiosk-banner-sub">${subtitle || ""}</div>
+  `;
+  kioskBanner.classList.remove("hidden");
+  kioskBanner.classList.add("show");
+  if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => {
+    kioskBanner.classList.remove("show");
+    kioskBanner.classList.add("hidden");
+  }, 8000);
 }
 
 function formatCountdown(calledAt) {
