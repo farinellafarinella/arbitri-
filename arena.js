@@ -7,6 +7,7 @@ const winnerOptions = document.getElementById("winnerOptions");
 const confirmWinnerBtn = document.getElementById("confirmWinnerBtn");
 const countdownEl = document.getElementById("countdown");
 const matchDisplay = document.getElementById("matchDisplay");
+const coinPageBtn = document.getElementById("coinPageBtn");
 
 const params = new URLSearchParams(window.location.search);
 const arenaId = params.get("id");
@@ -95,13 +96,13 @@ subscribeState((newState) => {
   }
 });
 
-if (!arenaId) {
-  arenaTitle.textContent = "Arena non trovata";
-  startMatchBtn.disabled = true;
-  setWinnerBtn.disabled = true;
-} else {
-  loadArena();
-}
+  if (!arenaId) {
+    arenaTitle.textContent = "Arena non trovata";
+    startMatchBtn.disabled = true;
+    confirmWinnerBtn.disabled = true;
+  } else {
+    loadArena();
+  }
 
 if (backToAdmin) {
   backToAdmin.href = tournamentId ? `tournament.html?id=${tournamentId}` : "index.html";
@@ -154,9 +155,7 @@ function statusLabel(status) {
 
 function renderWinnerOptions() {
   winnerOptions.innerHTML = "";
-  if (!currentArena || !currentArena.match) {
-    return;
-  }
+  if (!currentArena || !currentArena.match) return;
   const options = [currentArena.match.p1, currentArena.match.p2].filter(Boolean);
   options.forEach((name) => {
     const btn = document.createElement("button");
@@ -169,4 +168,8 @@ function renderWinnerOptions() {
     });
     winnerOptions.appendChild(btn);
   });
+}
+
+if (coinPageBtn) {
+  coinPageBtn.href = tournamentId ? `coin.html?tid=${tournamentId}&id=${arenaId}` : "coin.html";
 }
