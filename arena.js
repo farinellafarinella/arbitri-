@@ -8,9 +8,6 @@ const confirmWinnerBtn = document.getElementById("confirmWinnerBtn");
 const countdownEl = document.getElementById("countdown");
 const matchDisplay = document.getElementById("matchDisplay");
 const coinPageBtn = document.getElementById("coinPageBtn");
-const refereeSelectArena = document.getElementById("refereeSelectArena");
-const confirmRefereeBtn = document.getElementById("confirmRefereeBtn");
-const refereeMessage = document.getElementById("refereeMessage");
 
 const params = new URLSearchParams(window.location.search);
 const arenaId = params.get("id");
@@ -19,7 +16,6 @@ const backToAdmin = document.getElementById("backToAdmin");
 let state = loadState();
 let currentArena = null;
 let tournament = null;
-let confirmedReferee = "";
 
 function updateArenaUI() {
   if (!currentArena) {
@@ -43,7 +39,6 @@ function updateArenaUI() {
   renderWinnerOptions();
   matchDisplay.textContent = hasMatch ? `${currentArena.match.p1} vs ${currentArena.match.p2}` : "—";
   updateCountdown();
-  renderRefereeSelect();
 }
 
 function loadArena() {
@@ -80,38 +75,6 @@ confirmWinnerBtn.addEventListener("click", () => {
   saveArena();
 });
 
-confirmRefereeBtn.addEventListener("click", async () => {
-  if (!tournament || !currentArena) return;
-  const selected = refereeSelectArena.value;
-  if (!selected) return;
-  if (currentArena.refereeName && currentArena.refereeName !== selected) {
-    refereeMessage.textContent = "Questo arbitro non è assegnato a questa arena.";
-    refereeMessage.classList.add("error");
-    return;
-  }
-  refereeMessage.textContent = "";
-  refereeMessage.classList.remove("error");
-  confirmedReferee = selected;
-
-  if (window.FCM) {
-    window.FCM.initMessaging();
-    try {
-      const token = await window.FCM.requestPushPermission();
-      if (!token) {
-        refereeMessage.textContent = "Notifiche non abilitate.";
-        refereeMessage.classList.add("error");
-        return;
-      }
-      if (!tournament.refereeTokens) tournament.refereeTokens = {};
-      tournament.refereeTokens[selected] = token;
-      saveState(state);
-      refereeMessage.textContent = "Arbitro confermato. Notifiche abilitate.";
-    } catch {
-      refereeMessage.textContent = "Errore notifiche.";
-      refereeMessage.classList.add("error");
-    }
-  }
-});
 
 function saveArena() {
   if (!tournament) return;
@@ -208,21 +171,6 @@ function renderWinnerOptions() {
   });
 }
 
-function renderRefereeSelect() {
-  if (!refereeSelectArena || !tournament) return;
-  refereeSelectArena.innerHTML = "";
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Seleziona arbitro";
-  refereeSelectArena.appendChild(placeholder);
-  (tournament.referees || []).forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    if (name === confirmedReferee) opt.selected = true;
-    refereeSelectArena.appendChild(opt);
-  });
-}
 
 if (coinPageBtn) {
   coinPageBtn.href = tournamentId ? `coin.html?tid=${tournamentId}&id=${arenaId}` : "coin.html";
