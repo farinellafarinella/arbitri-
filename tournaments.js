@@ -1,4 +1,5 @@
 const tournamentNameInput = document.getElementById("tournamentName");
+const tournamentLinkInput = document.getElementById("tournamentLink");
 const addTournamentBtn = document.getElementById("addTournamentBtn");
 const tournamentList = document.getElementById("tournamentList");
 
@@ -22,6 +23,7 @@ function render() {
     row.className = "list-row";
     row.innerHTML = `
       <strong>${tournament.name}</strong>
+      <div class="muted">Challonge: ${tournament.challongeUrl ? tournament.challongeUrl : "—"}</div>
       <div class="row" style="margin-top:8px;">
         <a class="arena-link" href="${href}">Apri gestione</a>
         <button class="danger-btn" data-id="${tournament.id}">Elimina</button>
@@ -35,10 +37,12 @@ addTournamentBtn.addEventListener("click", () => {
   const name = tournamentNameInput.value.trim();
   if (!name) return;
   if (!state.tournaments) state.tournaments = [];
-  state.tournaments.push(createTournament(name));
+  const challongeUrl = tournamentLinkInput.value.trim();
+  state.tournaments.push(createTournament(name, challongeUrl));
   saveState(state);
   render();
   tournamentNameInput.value = "";
+  tournamentLinkInput.value = "";
 });
 
 tournamentList.addEventListener("click", (event) => {
