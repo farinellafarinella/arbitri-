@@ -13,6 +13,11 @@ const ASSETS = [
   "coin.js",
   "tournaments.js",
   "firebase-config.js",
+  "fcm-config.js",
+  "fcm.js",
+  "admin-notify.js",
+  "referee.html",
+  "referee.js",
   "manifest.json",
   "icon.png"
 ];
