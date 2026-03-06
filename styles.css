@@ -81,6 +81,51 @@ p {
   overflow: auto;
 }
 
+.kiosk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.kiosk-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 12px 28px var(--shadow);
+}
+
+.kiosk-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.kiosk-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.kiosk-body {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+@media (min-width: 1024px) {
+  .kiosk-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  .kiosk-card {
+    padding: 20px;
+  }
+  .kiosk-name {
+    font-size: 20px;
+  }
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
