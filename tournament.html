@@ -73,6 +73,11 @@
             <h2>Conferma Vincitore</h2>
             <p class="muted">Quando l'arbitro inserisce il vincitore, qui puoi segnare il risultato e liberare l'arena.</p>
           </div>
+          <div class="card">
+            <h2>Notifiche</h2>
+            <p class="muted">Le notifiche vengono inviate quando chiami un'arena.</p>
+            <div id="notifyMessage" class="muted"></div>
+          </div>
         </div>
       </section>
 
@@ -92,11 +97,15 @@
     </div>
 
     <script src="firebase-config.js?v=20260302"></script>
+    <script src="fcm-config.js?v=20260302"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
     <script src="state.js?v=20260302"></script>
     <script src="status.js?v=20260302"></script>
     <script src="admin.js?v=20260302"></script>
+    <script src="fcm.js?v=20260302"></script>
+    <script src="admin-notify.js?v=20260302"></script>
     <script src="register-sw.js"></script>
   </body>
 </html>
