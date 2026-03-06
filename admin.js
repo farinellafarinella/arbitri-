@@ -3,6 +3,7 @@ const addArenaBtn = document.getElementById("addArenaBtn");
 const refereeNameInput = document.getElementById("refereeName");
 const addRefereeBtn = document.getElementById("addRefereeBtn");
 const refereeList = document.getElementById("refereeList");
+const refereeMessage = document.getElementById("refereeMessage");
 const arenaSelect = document.getElementById("arenaSelect");
 const refereeSelect = document.getElementById("refereeSelect");
 const assignBtn = document.getElementById("assignBtn");
@@ -60,7 +61,12 @@ function render() {
   tournament.referees.forEach((name) => {
     const row = document.createElement("div");
     row.className = "list-row";
-    row.textContent = name;
+    const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
+    const link = `${basePath}referee.html?tid=${tournament.id}&ref=${encodeURIComponent(name)}`;
+    row.innerHTML = `
+      <strong>${name}</strong>
+      <button class="notify-btn" data-link="${link}">Attiva notifiche</button>
+    `;
     refereeList.appendChild(row);
   });
 
@@ -218,6 +224,18 @@ if (!isOnlineMode()) {
     render();
   }, 1000);
 }
+
+refereeList.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!target.classList.contains("notify-btn")) return;
+  const link = target.dataset.link;
+  try {
+    await navigator.clipboard.writeText(link);
+    refereeMessage.textContent = "Link copiato. Aprilo sul telefono dell'arbitro.";
+  } catch {
+    refereeMessage.textContent = `Apri questo link sul telefono dell'arbitro: ${link}`;
+  }
+});
 
 function statusLabel(status) {
   if (status === "called") return "Chiamata";
