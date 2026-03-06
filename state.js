@@ -66,7 +66,6 @@ function createTournament(name, challongeUrl = "") {
     name,
     challongeUrl,
     players: [],
-    refereeTokens: {},
     arenas: [],
     referees: []
   };
@@ -106,7 +105,6 @@ function normalizeTournament(tournament) {
     name: tournament.name,
     challongeUrl: tournament.challongeUrl || "",
     players: Array.isArray(tournament.players) ? tournament.players : [],
-    refereeTokens: tournament.refereeTokens || {},
     arenas: (tournament.arenas || []).map(normalizeArena),
     referees: tournament.referees || []
   };
