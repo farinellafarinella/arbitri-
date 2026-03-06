@@ -181,6 +181,10 @@ arenaList.addEventListener("click", (event) => {
     arena.calledAt = Date.now();
     saveState(state);
     render();
+    if (window.AdminNotify) {
+      const token = tournament.refereeTokens ? tournament.refereeTokens[arena.refereeName] : "";
+      window.AdminNotify.sendNotification(arena, token, `Sei stato chiamato in ${arena.name}`);
+    }
     return;
   }
   if (!target.classList.contains("confirm-btn")) return;
