@@ -26,6 +26,7 @@ function render() {
       <div class="muted">Challonge: ${tournament.challongeUrl ? tournament.challongeUrl : "—"}</div>
       <div class="row" style="margin-top:8px;">
         <a class="arena-link" href="${href}">Apri gestione</a>
+        <a class="arena-link" href="referee.html?tid=${tournament.id}">Attiva notifiche</a>
         <button class="danger-btn" data-id="${tournament.id}">Elimina</button>
       </div>
     `;
