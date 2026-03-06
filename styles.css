@@ -70,15 +70,56 @@ p {
   gap: 24px;
 }
 
+.admin-page .grid {
+  grid-template-columns: 1fr 1.4fr;
+}
+
 .panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+.span-2 {
+  grid-column: 1 / -1;
+}
+
 .panel .list {
   max-height: 320px;
   overflow: auto;
+}
+
+.arena-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: none;
+  overflow: visible;
+}
+
+#arenaList {
+  min-height: 800px;
+}
+
+.arena-grid .arena-row {
+  grid-template-columns: auto 1fr;
+  padding: 10px;
+  gap: 8px;
+}
+
+.arena-grid .arena-row .badge,
+.arena-grid .arena-row .confirm-btn,
+.arena-grid .arena-row .call-btn,
+.arena-grid .arena-row .arena-link {
+  grid-column: 1 / -1;
+}
+
+.arena-grid .arena-row strong {
+  font-size: 16px;
+}
+
+.arena-grid .arena-row .muted {
+  font-size: 13px;
 }
 
 .kiosk-grid {
@@ -87,11 +128,49 @@ p {
   gap: 16px;
 }
 
+.kiosk-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #111318;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 12px 28px var(--shadow);
+  text-align: center;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.kiosk-banner.hidden {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.kiosk-banner.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.kiosk-banner-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #facc15;
+}
+
+.kiosk-banner-sub {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
 .kiosk-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 16px;
+  padding: 18px;
   box-shadow: 0 12px 28px var(--shadow);
 }
 
@@ -104,7 +183,7 @@ p {
 }
 
 .kiosk-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -114,15 +193,75 @@ p {
   color: var(--muted);
 }
 
+.kiosk-match {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.kiosk-player {
+  background: #111318;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: #facc15;
+}
+
+.kiosk-timer {
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.kiosk-timer.flash {
+  animation: flash 0.8s infinite;
+}
+
+@keyframes flash {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
 @media (min-width: 1024px) {
   .kiosk-grid {
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   }
   .kiosk-card {
-    padding: 20px;
+    padding: 24px;
   }
   .kiosk-name {
-    font-size: 20px;
+    font-size: 24px;
+  }
+  .kiosk-player {
+    font-size: 28px;
+  }
+  .kiosk-timer {
+    font-size: 24px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .kiosk-grid {
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  }
+  .kiosk-card {
+    padding: 28px;
+  }
+  .kiosk-name {
+    font-size: 28px;
+  }
+  .kiosk-player {
+    font-size: 32px;
+  }
+  .kiosk-timer {
+    font-size: 28px;
   }
 }
 
@@ -346,13 +485,19 @@ button:disabled {
 }
 
 .referee-name {
-  color: #facc15;
-  font-weight: 700;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 16px;
 }
 
 .winner-name {
   color: #22c55e;
   font-weight: 700;
+}
+
+.arena-grid .arena-row .muted .match-players {
+  color: #facc15;
+  font-weight: 800;
 }
 
 .muted {
