@@ -3,7 +3,6 @@ const addArenaBtn = document.getElementById("addArenaBtn");
 const refereeNameInput = document.getElementById("refereeName");
 const addRefereeBtn = document.getElementById("addRefereeBtn");
 const refereeList = document.getElementById("refereeList");
-const refereeMessage = document.getElementById("refereeMessage");
 const arenaSelect = document.getElementById("arenaSelect");
 const refereeSelect = document.getElementById("refereeSelect");
 const assignBtn = document.getElementById("assignBtn");
@@ -61,12 +60,7 @@ function render() {
   tournament.referees.forEach((name) => {
     const row = document.createElement("div");
     row.className = "list-row";
-    const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
-    const link = `${basePath}referee.html?tid=${tournament.id}&ref=${encodeURIComponent(name)}`;
-    row.innerHTML = `
-      <strong>${name}</strong>
-      <button class="notify-btn" data-link="${link}">Attiva notifiche</button>
-    `;
+    row.textContent = name;
     refereeList.appendChild(row);
   });
 
@@ -187,10 +181,6 @@ arenaList.addEventListener("click", (event) => {
     arena.calledAt = Date.now();
     saveState(state);
     render();
-    if (window.AdminNotify) {
-      const token = tournament.refereeTokens ? tournament.refereeTokens[arena.refereeName] : "";
-      window.AdminNotify.sendNotification(arena, token, `Sei stato chiamato in ${arena.name}`);
-    }
     return;
   }
   if (!target.classList.contains("confirm-btn")) return;
@@ -229,12 +219,7 @@ refereeList.addEventListener("click", async (event) => {
   const target = event.target;
   if (!target.classList.contains("notify-btn")) return;
   const link = target.dataset.link;
-  try {
-    await navigator.clipboard.writeText(link);
-    refereeMessage.textContent = "Link copiato. Aprilo sul telefono dell'arbitro.";
-  } catch {
-    refereeMessage.textContent = `Apri questo link sul telefono dell'arbitro: ${link}`;
-  }
+  window.location.href = link;
 });
 
 function statusLabel(status) {
