@@ -73,6 +73,7 @@ function statusLabel(status) {
   if (status === "called") return "Chiamata";
   if (status === "occupied") return "Occupata";
   if (status === "standby") return "In attesa";
+  if (status === "expired") return "Scaduta";
   return "Libera";
 }
 
