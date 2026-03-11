@@ -1,49 +1,131 @@
-<!doctype html>
-<html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sorteggio</title>
-    <link rel="apple-touch-icon" href="icon.png" />
-    <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="top">
-        <div>
-          <h1 id="coinTitle">Sorteggio</h1>
-          <p id="coinStatus">Stato: —</p>
-        </div>
-        <div class="row" style="gap:8px;">
-          <a class="arena-link" id="backToArena" href="arena.html">← Arena</a>
-          <div id="connectionStatus" class="status ok">Locale</div>
-        </div>
-      </header>
+const coinTitle = document.getElementById("coinTitle");
+const coinStatus = document.getElementById("coinStatus");
+const coinToss = document.getElementById("coinToss");
+const coinLeft = document.getElementById("coinLeft");
+const coinRight = document.getElementById("coinRight");
+const tossBtn = document.getElementById("tossBtn");
+const tossMessage = document.getElementById("tossMessage");
+const backToArena = document.getElementById("backToArena");
 
-      <section class="grid">
-        <div class="panel">
-          <div class="card">
-            <h2>Testa o croce</h2>
-            <div id="coinToss" class="coin-toss">
-              <div id="coinLeft" class="coin-side">—</div>
-              <div id="coinRight" class="coin-side">—</div>
-            </div>
-            <div class="row">
-              <button id="tossBtn" disabled>Lancia moneta</button>
-            </div>
-            <div id="tossMessage" class="muted"></div>
-          </div>
-        </div>
-      </section>
-    </div>
+const params = new URLSearchParams(window.location.search);
+const arenaId = params.get("id");
+const tournamentId = params.get("tid");
 
-    <script src="firebase-config.js?v=20260302"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-    <script src="state.js?v=20260302"></script>
-    <script src="status.js?v=20260302"></script>
-    <script src="coin.js?v=20260302"></script>
-    <script src="register-sw.js"></script>
-  </body>
-</html>
+let state = loadState();
+let tournament = null;
+let currentArena = null;
+
+function updateUI() {
+  if (!currentArena) {
+    coinTitle.textContent = "Arena non trovata";
+    coinStatus.textContent = "Stato: —";
+    coinLeft.textContent = "—";
+    coinRight.textContent = "—";
+    tossBtn.disabled = true;
+    return;
+  }
+
+  coinTitle.textContent = currentArena.name;
+  coinStatus.textContent = `Stato: ${statusLabel(currentArena.status)}`;
+
+  if (!currentArena.match) {
+    coinLeft.textContent = "—";
+    coinRight.textContent = "—";
+    tossBtn.disabled = true;
+    tossMessage.textContent = "Nessun match caricato.";
+    return;
+  }
+
+  coinLeft.textContent = currentArena.match.p1;
+  coinRight.textContent = currentArena.match.p2;
+
+  const canToss = currentArena.status === "occupied";
+  tossBtn.disabled = !canToss;
+  tossMessage.textContent = canToss ? "" : "La partita deve essere iniziata.";
+}
+
+function loadArena() {
+  state = loadState();
+  tournament = findTournament(state, tournamentId);
+  currentArena = tournament ? tournament.arenas.find((a) => a.id === arenaId) : null;
+  updateUI();
+}
+
+function saveArena() {
+  if (!tournament || !currentArena) return;
+  const index = tournament.arenas.findIndex((a) => a.id === currentArena.id);
+  if (index !== -1) {
+    tournament.arenas[index] = currentArena;
+  }
+  normalizeState(state);
+  saveState(state);
+  updateUI();
+}
+
+function clearSelection() {
+  coinLeft.classList.remove("winner");
+  coinRight.classList.remove("winner");
+}
+
+function toss() {
+  if (!currentArena || !currentArena.match) return;
+  const p1 = currentArena.match.p1;
+  const p2 = currentArena.match.p2;
+  if (!p1 || !p2) return;
+  clearSelection();
+  coinToss.classList.remove("tossing");
+  void coinToss.offsetWidth;
+  coinToss.classList.add("tossing");
+
+  const flashes = 8;
+  let step = 0;
+  const interval = setInterval(() => {
+    step += 1;
+    if (step % 2 === 0) {
+      coinLeft.classList.add("winner");
+      coinRight.classList.remove("winner");
+    } else {
+      coinRight.classList.add("winner");
+      coinLeft.classList.remove("winner");
+    }
+    if (step >= flashes) {
+      clearInterval(interval);
+      setTimeout(() => {
+        const side = Math.random() < 0.5 ? p1 : p2;
+        currentArena.coinTossResult = side;
+        if (side === p1) {
+          coinLeft.classList.add("winner");
+          coinRight.classList.remove("winner");
+        } else {
+          coinRight.classList.add("winner");
+          coinLeft.classList.remove("winner");
+        }
+        coinToss.classList.remove("tossing");
+        saveArena();
+      }, 250);
+    }
+  }, 160);
+}
+
+function statusLabel(status) {
+  if (status === "called") return "Chiamata";
+  if (status === "occupied") return "Occupata";
+  if (status === "standby") return "In attesa";
+  if (status === "expired") return "Scaduta";
+  return "Libera";
+}
+
+if (backToArena) {
+  backToArena.href = tournamentId ? `arena.html?tid=${tournamentId}&id=${arenaId}` : "arena.html";
+}
+
+tossBtn.addEventListener("click", toss);
+
+subscribeState((newState) => {
+  state = newState;
+  tournament = findTournament(state, tournamentId);
+  currentArena = tournament ? tournament.arenas.find((a) => a.id === arenaId) : null;
+  updateUI();
+});
+
+loadArena();
