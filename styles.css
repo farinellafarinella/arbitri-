@@ -71,7 +71,7 @@ p {
 }
 
 .admin-page .grid {
-  grid-template-columns: 1fr 1.4fr;
+  grid-template-columns: 1fr;
 }
 
 .panel {
@@ -560,6 +560,16 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
+  .app {
+    max-width: 100%;
+    padding: 20px 14px 28px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
   .top {
     flex-direction: column;
     align-items: flex-start;
@@ -615,4 +625,8 @@ button:disabled {
   button {
     width: 100%;
   }
+}
+
+.hidden {
+  display: none;
 }
