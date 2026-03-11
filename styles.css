@@ -578,6 +578,24 @@ button:disabled {
   }
 }
 
+@media (max-width: 900px) {
+  .admin-page .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-page .panel {
+    gap: 12px;
+  }
+
+  .arena-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #arenaList {
+    min-height: 320px;
+  }
+}
+
 @media (max-width: 480px) {
   .app {
     padding: 20px 16px 32px;
