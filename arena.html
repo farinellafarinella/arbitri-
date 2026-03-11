@@ -51,6 +51,18 @@
           </div>
 
           <div class="card">
+            <h2>Replay rapido</h2>
+            <div id="replayStatus" class="muted">Pronto.</div>
+            <div class="row replay-actions">
+              <button id="startReplayBtn">Avvia registrazione</button>
+              <button id="markMomentBtn" disabled>Segna momento</button>
+              <button id="deleteClipBtn" disabled>Elimina clip</button>
+            </div>
+            <video id="replayVideo" class="replay-video" playsinline controls hidden></video>
+            <div id="replayMeta" class="muted" hidden>—</div>
+          </div>
+
+          <div class="card">
             <h2>Sorteggio (testa o croce)</h2>
             <div class="row">
               <a id="coinPageBtn" class="arena-link" href="coin.html">Apri sorteggio</a>
