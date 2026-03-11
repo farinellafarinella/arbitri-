@@ -6,6 +6,8 @@ const registryRefereeName = document.getElementById("registryRefereeName");
 const addRegistryRefereeBtn = document.getElementById("addRegistryRefereeBtn");
 const registryRefereeList = document.getElementById("registryRefereeList");
 const registryRefereeMessage = document.getElementById("registryRefereeMessage");
+const toggleRegistryBtn = document.getElementById("toggleRegistryBtn");
+const registryPanelBody = document.getElementById("registryPanelBody");
 
 let state = loadState();
 if (!state.tournaments) state = { tournaments: [] };
@@ -108,6 +110,14 @@ if (addRegistryRefereeBtn) {
     saveState(state);
     renderRegistry();
     registryRefereeName.value = "";
+  });
+}
+
+if (toggleRegistryBtn && registryPanelBody) {
+  toggleRegistryBtn.addEventListener("click", () => {
+    const isHidden = registryPanelBody.classList.contains("hidden");
+    registryPanelBody.classList.toggle("hidden");
+    toggleRegistryBtn.textContent = isHidden ? "Nascondi albo" : "Mostra albo";
   });
 }
 
