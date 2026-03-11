@@ -1,4 +1,4 @@
-const CACHE_NAME = "arbitri-arene-v1";
+const CACHE_NAME = "arbitri-arene-v2";
 const ASSETS = [
   "./",
   "index.html",
@@ -6,6 +6,7 @@ const ASSETS = [
   "arena.html",
   "coin.html",
   "kiosk.html",
+  "ratings.html",
   "styles.css",
   "state.js",
   "status.js",
@@ -13,6 +14,7 @@ const ASSETS = [
   "arena.js",
   "coin.js",
   "kiosk.js",
+  "ratings.js",
   "kiosk-link.js",
   "tournaments.js",
   "firebase-config.js",
