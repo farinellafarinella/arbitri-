@@ -31,12 +31,17 @@
 
           <div class="card">
             <h2>Albo arbitri</h2>
-            <div class="row">
-              <input id="registryRefereeName" placeholder="Nome arbitro" />
-              <button id="addRegistryRefereeBtn">Registra</button>
+            <div class="row" style="margin-top:6px;">
+              <button id="toggleRegistryBtn">Mostra albo</button>
             </div>
-            <div id="registryRefereeList" class="list"></div>
-            <div id="registryRefereeMessage" class="muted"></div>
+            <div id="registryPanelBody" class="hidden">
+              <div class="row">
+                <input id="registryRefereeName" placeholder="Nome arbitro" />
+                <button id="addRegistryRefereeBtn">Registra</button>
+              </div>
+              <div id="registryRefereeList" class="list"></div>
+              <div id="registryRefereeMessage" class="muted"></div>
+            </div>
           </div>
         </div>
 
