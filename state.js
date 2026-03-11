@@ -33,6 +33,7 @@ function loadState() {
       return migrateLegacy(parsed);
     }
     parsed.tournaments = parsed.tournaments.map(normalizeTournament);
+    parsed.refereesRegistry = normalizeRefereeRegistry(parsed.refereesRegistry || []);
     normalizeState(parsed);
     return parsed;
   } catch {
@@ -67,7 +68,20 @@ function createTournament(name, challongeUrl = "") {
     challongeUrl,
     players: [],
     arenas: [],
-    referees: []
+    referees: [],
+    refereeIds: [],
+    refereeRatings: {}
+  };
+}
+
+function createReferee(name, level = 1) {
+  return {
+    id: `ref-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    name,
+    level,
+    matchesArbitrated: 0,
+    tournamentsArbitrated: [],
+    exp: 0
   };
 }
 
@@ -87,6 +101,13 @@ function createArena(name) {
 }
 
 function normalizeState(state) {
+  if (!state.refereesRegistry) state.refereesRegistry = [];
+  state.refereesRegistry = normalizeRefereeRegistry(state.refereesRegistry);
+  state.refereesRegistry.forEach((ref) => {
+    const levelInfo = getRefereeLevelInfo(ref.exp);
+    ref.level = levelInfo.level;
+  });
+  ensureTournamentRefereeIds(state);
   expireCalls(state);
   return state;
 }
@@ -106,8 +127,86 @@ function normalizeTournament(tournament) {
     challongeUrl: tournament.challongeUrl || "",
     players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
-    referees: tournament.referees || []
+    referees: tournament.referees || [],
+    refereeIds: Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [],
+    refereeRatings: normalizeRefereeRatings(tournament.refereeRatings || {})
   };
+}
+
+function normalizeRefereeRegistry(list) {
+  return (list || []).map((ref) => ({
+    id: ref.id,
+    name: ref.name || "",
+    level: Number.isFinite(ref.level) ? ref.level : 1,
+    matchesArbitrated: Number.isFinite(ref.matchesArbitrated) ? ref.matchesArbitrated : 0,
+    tournamentsArbitrated: Array.isArray(ref.tournamentsArbitrated) ? ref.tournamentsArbitrated : [],
+    exp: Number.isFinite(ref.exp) ? ref.exp : 0,
+    ratingTotal: Number.isFinite(ref.ratingTotal) ? ref.ratingTotal : 0,
+    ratingCount: Number.isFinite(ref.ratingCount) ? ref.ratingCount : 0
+  })).filter((ref) => ref.name);
+}
+
+function normalizeRefereeRatings(ratings) {
+  const next = {};
+  Object.keys(ratings || {}).forEach((refId) => {
+    const entry = ratings[refId] || {};
+    next[refId] = {
+      total: Number.isFinite(entry.total) ? entry.total : 0,
+      count: Number.isFinite(entry.count) ? entry.count : 0
+    };
+  });
+  return next;
+}
+
+function getRefereeLevelInfo(exp) {
+  const thresholds = [
+    { level: 8, title: "Master Judge", exp: 1200 },
+    { level: 7, title: "Head Judge", exp: 750 },
+    { level: 6, title: "Head Judge Candidate", exp: 500 },
+    { level: 5, title: "Senior Judge II", exp: 300 },
+    { level: 4, title: "Senior Judge I", exp: 150 },
+    { level: 3, title: "Junior Judge II", exp: 75 },
+    { level: 2, title: "Junior Judge I", exp: 25 },
+    { level: 1, title: "Base", exp: 0 }
+  ];
+  const safeExp = Number.isFinite(exp) ? exp : 0;
+  const currentIndex = thresholds.findIndex((t) => safeExp >= t.exp);
+  const current = currentIndex === -1 ? thresholds[thresholds.length - 1] : thresholds[currentIndex];
+  const next = currentIndex > 0 ? thresholds[currentIndex - 1] : null;
+  const expToNext = next ? Math.max(0, next.exp - safeExp) : 0;
+  const progressMax = next ? next.exp : current.exp;
+  const progressMin = current.exp;
+  const progressValue = next ? safeExp : current.exp;
+  return {
+    level: current.level,
+    title: current.title,
+    exp: current.exp,
+    nextLevel: next ? next.level : null,
+    nextTitle: next ? next.title : null,
+    expToNext,
+    progressMin,
+    progressMax,
+    progressValue
+  };
+}
+
+function ensureTournamentRefereeIds(state) {
+  state.tournaments.forEach((tournament) => {
+    if (!Array.isArray(tournament.refereeIds)) tournament.refereeIds = [];
+    const hasIds = tournament.refereeIds.length > 0;
+    if (hasIds) return;
+    if (!Array.isArray(tournament.referees) || tournament.referees.length === 0) return;
+    tournament.referees.forEach((name) => {
+      let ref = state.refereesRegistry.find((r) => r.name === name);
+      if (!ref) {
+        ref = createReferee(name);
+        state.refereesRegistry.push(ref);
+      }
+      if (!tournament.refereeIds.includes(ref.id)) {
+        tournament.refereeIds.push(ref.id);
+      }
+    });
+  });
 }
 
 function normalizeArena(arena) {
@@ -131,7 +230,7 @@ function migrateLegacy(parsed) {
   const tournament = createTournament("Torneo 1");
   tournament.arenas = legacyArenas.map(normalizeArena);
   tournament.referees = legacyReferees;
-  const state = { tournaments: [tournament] };
+  const state = { tournaments: [tournament], refereesRegistry: [] };
   normalizeState(state);
   return state;
 }
@@ -147,7 +246,7 @@ function expireCalls(state) {
     tournament.arenas.forEach((arena) => {
       if (arena.status === "called" && arena.calledAt) {
         if (now - arena.calledAt > CALL_WINDOW_MS) {
-          arena.status = "free";
+          arena.status = "expired";
           arena.calledAt = null;
           changed = true;
         }
