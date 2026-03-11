@@ -2,11 +2,56 @@ const tournamentNameInput = document.getElementById("tournamentName");
 const tournamentLinkInput = document.getElementById("tournamentLink");
 const addTournamentBtn = document.getElementById("addTournamentBtn");
 const tournamentList = document.getElementById("tournamentList");
+const registryRefereeName = document.getElementById("registryRefereeName");
+const addRegistryRefereeBtn = document.getElementById("addRegistryRefereeBtn");
+const registryRefereeList = document.getElementById("registryRefereeList");
+const registryRefereeMessage = document.getElementById("registryRefereeMessage");
 
 let state = loadState();
 if (!state.tournaments) state = { tournaments: [] };
 
+function renderRegistry() {
+  if (!registryRefereeList) return;
+  registryRefereeList.innerHTML = "";
+  registryRefereeMessage.textContent = "";
+  const list = state.refereesRegistry || [];
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "Nessun arbitro registrato.";
+    registryRefereeList.appendChild(empty);
+    return;
+  }
+  list.forEach((ref) => {
+    const levelInfo = getRefereeLevelInfo(ref.exp || 0);
+    const progressTotal = Math.max(1, levelInfo.progressMax - levelInfo.progressMin);
+    const progressValue = Math.min(progressTotal, Math.max(0, (ref.exp || 0) - levelInfo.progressMin));
+    const progressPercent = Math.round((progressValue / progressTotal) * 100);
+    const expToNextText = levelInfo.nextLevel
+      ? `EXP mancanti al prossimo livello: ${levelInfo.expToNext}`
+      : "Livello massimo raggiunto";
+    const row = document.createElement("div");
+    row.className = "list-row";
+    row.innerHTML = `
+      <strong>${ref.name}</strong>
+      <div class="muted">Livello: Lv. ${levelInfo.level} - ${levelInfo.title}</div>
+      <div class="muted">Partite arbitrate: ${ref.matchesArbitrated || 0}</div>
+      <div class="muted">Tornei arbitrati: ${Array.isArray(ref.tournamentsArbitrated) ? ref.tournamentsArbitrated.length : 0}</div>
+      <div class="muted">EXP: ${ref.exp || 0}</div>
+      <div class="muted">${expToNextText}</div>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${progressTotal}" aria-valuenow="${progressValue}">
+        <div class="progress-bar" style="width:${progressPercent}%"></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="danger-btn remove-registry-ref" data-id="${ref.id}">Rimuovi</button>
+      </div>
+    `;
+    registryRefereeList.appendChild(row);
+  });
+}
+
 function render() {
+  renderRegistry();
   tournamentList.innerHTML = "";
   if (state.tournaments.length === 0) {
     const empty = document.createElement("div");
@@ -31,6 +76,7 @@ function render() {
     `;
     tournamentList.appendChild(row);
   });
+
 }
 
 addTournamentBtn.addEventListener("click", () => {
@@ -44,6 +90,55 @@ addTournamentBtn.addEventListener("click", () => {
   tournamentNameInput.value = "";
   tournamentLinkInput.value = "";
 });
+
+if (addRegistryRefereeBtn) {
+  addRegistryRefereeBtn.addEventListener("click", () => {
+    const name = registryRefereeName.value.trim();
+    if (!name) return;
+    if (!state.refereesRegistry) state.refereesRegistry = [];
+    const exists = state.refereesRegistry.some((ref) => ref.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      registryRefereeMessage.textContent = "Arbitro già presente nell'albo.";
+      registryRefereeMessage.classList.add("error");
+      return;
+    }
+    registryRefereeMessage.textContent = "";
+    registryRefereeMessage.classList.remove("error");
+    state.refereesRegistry.push(createReferee(name, 1));
+    saveState(state);
+    renderRegistry();
+    registryRefereeName.value = "";
+  });
+}
+
+if (registryRefereeList) {
+  registryRefereeList.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.classList.contains("remove-registry-ref")) return;
+    const refId = target.dataset.id;
+    if (!refId) return;
+    const ok = window.confirm("Rimuovere l'arbitro dall'albo?");
+    if (!ok) return;
+    const removedRef = (state.refereesRegistry || []).find((ref) => ref.id === refId);
+    state.refereesRegistry = (state.refereesRegistry || []).filter((ref) => ref.id !== refId);
+    state.tournaments = (state.tournaments || []).map((tournament) => {
+      const ids = Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [];
+      tournament.refereeIds = ids.filter((id) => id !== refId);
+      if (tournament.refereeRatings && tournament.refereeRatings[refId]) {
+        delete tournament.refereeRatings[refId];
+      }
+      tournament.arenas.forEach((arena) => {
+        if (removedRef && arena.refereeName === removedRef.name) {
+          arena.refereeName = "";
+        }
+      });
+      return tournament;
+    });
+    saveState(state);
+    render();
+  });
+}
 
 tournamentList.addEventListener("click", (event) => {
   const target = event.target;
@@ -61,6 +156,7 @@ tournamentList.addEventListener("click", (event) => {
 subscribeState((newState) => {
   state = newState;
   if (!state.tournaments) state = { tournaments: [] };
+  if (!state.refereesRegistry) state.refereesRegistry = [];
   render();
 });
 
