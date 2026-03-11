@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="admin-page">
     <div class="app">
       <header class="top">
         <div>
@@ -32,13 +32,14 @@
           </div>
 
           <div class="card">
-            <h2>Arbitri</h2>
+            <h2>Arbitri torneo</h2>
+            <div class="muted">Seleziona dall'albo arbitri (pagina Tornei).</div>
             <div class="row">
-              <input id="refereeName" placeholder="Nome arbitro" />
-              <button id="addRefereeBtn">Aggiungi</button>
+              <select id="tournamentRefereeSelect"></select>
+              <button id="addTournamentRefereeBtn">Aggiungi</button>
             </div>
-            <div id="refereeList" class="list"></div>
-            <div id="refereeMessage" class="muted"></div>
+            <div id="tournamentRefereeList" class="list"></div>
+            <div id="tournamentRefereeMessage" class="muted"></div>
           </div>
 
           <div class="card">
@@ -67,7 +68,7 @@
         <div class="panel">
           <div class="card">
             <h2>Stato Arene</h2>
-            <div id="arenaList" class="list"></div>
+            <div id="arenaList" class="list arena-grid"></div>
           </div>
 
           <div class="card">
@@ -96,6 +97,15 @@
           <h2>Vista sala (Kiosk)</h2>
           <div class="row">
             <a id="kioskLink" class="arena-link" href="#">Apri Kiosk</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="card">
+          <h2>Valutazione arbitri</h2>
+          <div class="row">
+            <a id="ratingsLink" class="arena-link" href="#">Apri valutazioni</a>
           </div>
         </div>
       </section>
