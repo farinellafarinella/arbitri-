@@ -1,0 +1,16 @@
+{
+  "name": "arbitri-arene",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestione tornei, arene e arbitri (realtime)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "firebase-admin": "^12.2.0"
+  }
+}
