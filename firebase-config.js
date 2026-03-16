@@ -11,3 +11,5 @@ window.FIREBASE_CONFIG = {
 window.ADMIN_EMAILS = [
   "inserisci-admin@example.com"
 ];
+
+window.FCM_WEB_VAPID_KEY = BJZJlIzE_9GY4p_b1IvaevsSSUCfnyRtGhpzhm38bS9mM5OOugLduOUi1IkRfoIPhoHxt01eeWN2BaSHFypMgPE;
