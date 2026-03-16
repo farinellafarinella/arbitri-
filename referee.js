@@ -199,7 +199,7 @@ function syncReferee(user) {
     window.location.href = "index.html";
     return;
   }
-  currentReferee = upsertRefereeAccountProfile(user);
+  currentReferee = upsertRefereeAccountProfile(user) || currentReferee;
   renderRefereeHome();
 }
 
@@ -214,6 +214,9 @@ subscribeState((newState) => {
   state = newState;
   if (currentUser) {
     currentReferee = (state.refereesRegistry || []).find((ref) => ref.authUid === currentUser.uid) || currentReferee;
+    if (!currentReferee && isRemoteStateReady()) {
+      currentReferee = upsertRefereeAccountProfile(currentUser, currentUser.displayName || "");
+    }
   }
   renderRefereeHome();
 });
