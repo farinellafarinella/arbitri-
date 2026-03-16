@@ -28,6 +28,22 @@ const tournamentId = params.get("id");
 let tournament = findTournament(state, tournamentId);
 let currentUser = null;
 
+function notifyArenaCall(arena) {
+  const ref = (state.refereesRegistry || []).find((item) => item.id === arena.refereeId);
+  if (!ref || !ref.webPushToken) return;
+  const url = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}arena.html?tid=${tournament.id}&id=${arena.id}`;
+  fetch("/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token: ref.webPushToken,
+      title: `Arena chiamata: ${arena.name}`,
+      body: arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Apri l'arena assegnata",
+      data: { url }
+    })
+  }).catch(() => {});
+}
+
 function render() {
   if (!tournament) {
     tournamentTitle.textContent = "Torneo non trovato";
@@ -273,6 +289,7 @@ arenaList.addEventListener("click", (event) => {
     arena.status = "called";
     arena.calledAt = Date.now();
     saveState(state);
+    notifyArenaCall(arena);
     render();
     return;
   }
@@ -284,6 +301,7 @@ arenaList.addEventListener("click", (event) => {
     arena.status = "called";
     arena.calledAt = Date.now();
     saveState(state);
+    notifyArenaCall(arena);
     render();
     return;
   }
