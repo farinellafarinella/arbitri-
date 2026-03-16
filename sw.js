@@ -2,7 +2,7 @@ importScripts("firebase-config-sw.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
 
-const CACHE_NAME = "arbitri-arene-v20";
+const CACHE_NAME = "arbitri-arene-v21";
 const ASSETS = [
   "./",
   "index.html",
