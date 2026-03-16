@@ -1,4 +1,8 @@
-const CACHE_NAME = "arbitri-arene-v18";
+importScripts("firebase-config-sw.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
+
+const CACHE_NAME = "arbitri-arene-v20";
 const ASSETS = [
   "./",
   "index.html",
@@ -21,9 +25,30 @@ const ASSETS = [
   "referee.js",
   "tournaments.js",
   "firebase-config.js",
+  "firebase-config-sw.js",
   "manifest.json",
   "icon.png"
 ];
+
+let messaging = null;
+if (self.FIREBASE_CONFIG && self.firebase && firebase.apps && firebase.apps.length === 0) {
+  firebase.initializeApp(self.FIREBASE_CONFIG);
+}
+if (self.firebase && typeof firebase.messaging === "function") {
+  messaging = firebase.messaging();
+}
+
+if (messaging && typeof messaging.onBackgroundMessage === "function") {
+  messaging.onBackgroundMessage((payload) => {
+    const title = (payload.notification && payload.notification.title) || "Chiamata arena";
+    const body = (payload.notification && payload.notification.body) || "Sei stato chiamato";
+    const data = payload.data || {};
+    self.registration.showNotification(title, {
+      body,
+      data
+    });
+  });
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -45,5 +70,18 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification && event.notification.data && event.notification.data.url;
+  if (!targetUrl) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => client.url === targetUrl);
+      if (existing) return existing.focus();
+      return self.clients.openWindow(targetUrl);
+    })
   );
 });
