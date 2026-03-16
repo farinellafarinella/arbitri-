@@ -94,6 +94,9 @@ function render() {
       ? `<button class="restart-btn" data-id="${arena.id}">Riavvia chiamata</button>
          <button class="cancel-btn danger-btn" data-id="${arena.id}">Annulla match</button>`
       : "";
+    const clearRefAction = arena.refereeId || arena.refereeName
+      ? `<button class="remove-arena-ref-btn danger-btn" data-id="${arena.id}">Togli arbitro</button>`
+      : "";
     const clearMatchAction = arena.match || arena.status !== "free"
       ? `<button class="clear-match-btn danger-btn" data-id="${arena.id}">Svuota match</button>`
       : "";
@@ -112,6 +115,7 @@ function render() {
       <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" && arena.match ? "" : "disabled"}>Chiama arena</button>
       <button class="confirm-btn" data-id="${arena.id}" ${arena.winnerCandidate ? "" : "disabled"}>Segna vincitore</button>
       <a class="arena-link" href="arena.html?tid=${tournament.id}&id=${arena.id}" target="_blank" rel="noopener">Apri pagina</a>
+      ${clearRefAction}
       ${expiredActions}
       ${clearMatchAction}
     `;
@@ -331,6 +335,17 @@ arenaList.addEventListener("click", (event) => {
     arena.selectedWinner = "";
     arena.winnerCandidate = "";
     arena.coinTossResult = "";
+    saveState(state);
+    render();
+    return;
+  }
+  if (target.classList.contains("remove-arena-ref-btn")) {
+    const arenaId = target.dataset.id;
+    if (!tournament) return;
+    const arena = tournament.arenas.find((a) => a.id === arenaId);
+    if (!arena) return;
+    arena.refereeId = "";
+    arena.refereeName = "";
     saveState(state);
     render();
     return;
