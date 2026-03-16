@@ -90,7 +90,7 @@ if (auth) {
     if (user) {
       const actualRole = getRequestedLoginRole() || getActiveUserRole();
       setActiveUserRole(actualRole);
-      if (actualRole !== "admin") {
+      if (actualRole !== "admin" && isRemoteStateReady()) {
         upsertRefereeAccountProfile(user, registerNameValue() || user.displayName || "");
       }
       clearRequestedLoginRole();
