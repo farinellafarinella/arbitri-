@@ -1,6 +1,8 @@
 const refereeTitle = document.getElementById("refereeTitle");
 const refereeSubtitle = document.getElementById("refereeSubtitle");
 const refereeProfileCard = document.getElementById("refereeProfileCard");
+const enablePushBtn = document.getElementById("enablePushBtn");
+const pushStatus = document.getElementById("pushStatus");
 const assignedArenaList = document.getElementById("assignedArenaList");
 const refereeMessage = document.getElementById("refereeMessage");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -12,6 +14,7 @@ let redirectedArenaKey = "";
 
 function renderRefereeHome() {
   renderProfile();
+  renderPushStatus();
   assignedArenaList.innerHTML = "";
   refereeMessage.textContent = "";
 
@@ -69,6 +72,84 @@ function renderRefereeHome() {
     redirectedArenaKey = "";
   } else {
     redirectedArenaKey = "";
+  }
+}
+
+function pushSupported() {
+  return Boolean(
+    window.firebase &&
+    typeof firebase.messaging === "function" &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
+}
+
+function vapidConfigured() {
+  return Boolean(window.FCM_WEB_VAPID_KEY && window.FCM_WEB_VAPID_KEY !== "inserisci-vapid-public-key");
+}
+
+function renderPushStatus() {
+  if (!pushStatus || !enablePushBtn) return;
+  if (!pushSupported()) {
+    pushStatus.textContent = "Questo dispositivo non supporta le notifiche push web.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (!vapidConfigured()) {
+    pushStatus.textContent = "Manca la VAPID key web in configurazione.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (!currentReferee) {
+    pushStatus.textContent = "Profilo arbitro non disponibile.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (currentReferee.webPushToken) {
+    pushStatus.textContent = "Notifiche push attive su questo dispositivo.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (Notification.permission === "denied") {
+    pushStatus.textContent = "Notifiche bloccate dal browser/dispositivo.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  pushStatus.textContent = "Attiva le notifiche push per ricevere la chiamata arena.";
+  enablePushBtn.disabled = false;
+}
+
+async function enablePushNotifications() {
+  if (!currentReferee || !pushSupported() || !vapidConfigured()) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      renderPushStatus();
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({
+      vapidKey: window.FCM_WEB_VAPID_KEY,
+      serviceWorkerRegistration: registration
+    });
+    if (!token) {
+      pushStatus.textContent = "Impossibile ottenere il token push.";
+      return;
+    }
+    const latestState = loadState();
+    const ref = (latestState.refereesRegistry || []).find((item) => item.id === currentReferee.id);
+    if (!ref) {
+      pushStatus.textContent = "Profilo arbitro non trovato.";
+      return;
+    }
+    ref.webPushToken = token;
+    saveState(latestState);
+    currentReferee = ref;
+    renderPushStatus();
+  } catch (error) {
+    pushStatus.textContent = "Errore nell'attivazione delle notifiche push.";
   }
 }
 
@@ -146,6 +227,10 @@ if (logoutBtn) {
     await auth.signOut();
     window.location.href = "login.html";
   });
+}
+
+if (enablePushBtn) {
+  enablePushBtn.addEventListener("click", enablePushNotifications);
 }
 
 renderRefereeHome();
