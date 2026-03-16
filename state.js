@@ -14,6 +14,49 @@ let pendingState = null;
 let lastSerialized = "";
 let hasInitialRemoteSnapshot = false;
 
+function mergeReferees(baseList, incomingList) {
+  const merged = [...(baseList || []).map((ref) => normalizeRefereeRegistry([ref])[0]).filter(Boolean)];
+  (incomingList || []).forEach((incoming) => {
+    const normalizedIncoming = normalizeRefereeRegistry([incoming])[0];
+    if (!normalizedIncoming) return;
+    const index = merged.findIndex((ref) =>
+      (normalizedIncoming.id && ref.id === normalizedIncoming.id) ||
+      (normalizedIncoming.authUid && ref.authUid === normalizedIncoming.authUid) ||
+      (normalizedIncoming.email && normalizeEmailForMerge(ref.email) === normalizeEmailForMerge(normalizedIncoming.email)) ||
+      ref.name.trim().toLowerCase() === normalizedIncoming.name.trim().toLowerCase()
+    );
+    if (index === -1) {
+      merged.push(normalizedIncoming);
+      return;
+    }
+    merged[index] = {
+      ...merged[index],
+      ...normalizedIncoming,
+      id: merged[index].id || normalizedIncoming.id
+    };
+  });
+  return merged;
+}
+
+function normalizeEmailForMerge(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function mergePendingState(baseState, nextState) {
+  const merged = sanitizeState(baseState);
+  const normalizedNext = sanitizeState(nextState);
+  merged.refereesRegistry = mergeReferees(merged.refereesRegistry || [], normalizedNext.refereesRegistry || []);
+
+  const baseHasTournaments = Array.isArray(merged.tournaments) && merged.tournaments.length > 0;
+  const nextHasTournaments = Array.isArray(normalizedNext.tournaments) && normalizedNext.tournaments.length > 0;
+  if (!baseHasTournaments || nextHasTournaments) {
+    merged.tournaments = normalizedNext.tournaments;
+  }
+
+  merged.updatedAt = Math.max(merged.updatedAt || 0, normalizedNext.updatedAt || 0);
+  return normalizeState(merged);
+}
+
 function loadPersistedRemoteCache() {
   try {
     const raw = localStorage.getItem(REMOTE_CACHE_KEY);
@@ -324,7 +367,11 @@ function initFirestoreSync() {
     persistRemoteCache(stateCache);
     lastSerialized = JSON.stringify(stateCache);
     if (pendingState && (pendingState.updatedAt || 0) > (remoteState.updatedAt || 0)) {
-      scheduleWrite(pendingState);
+      const mergedPending = mergePendingState(remoteState, pendingState);
+      pendingState = mergedPending;
+      stateCache = mergedPending;
+      persistRemoteCache(stateCache);
+      scheduleWrite(mergedPending);
     } else {
       pendingState = null;
     }
