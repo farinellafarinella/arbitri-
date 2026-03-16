@@ -157,6 +157,10 @@ function upsertRefereeAccountProfile(user, displayName) {
     referee = registry.find((ref) => ref.name.trim().toLowerCase() === normalizedName.toLowerCase());
   }
 
+  if (!referee && isOnlineMode() && !isRemoteStateReady()) {
+    return null;
+  }
+
   if (!referee) {
     referee = createReferee(normalizedName || normalizedEmail || "Arbitro");
     registry.push(referee);
