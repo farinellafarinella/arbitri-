@@ -22,18 +22,26 @@ admin.initializeApp({
 });
 
 app.post("/notify", async (req, res) => {
-  const { token, title, body } = req.body || {};
-  if (!token) return res.status(400).json({ error: "Missing token" });
+  const { token, tokens, title, body, data } = req.body || {};
+  const targetTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [token].filter(Boolean);
+  if (targetTokens.length === 0) return res.status(400).json({ error: "Missing token" });
   try {
-    const message = {
-      token,
-      notification: {
-        title: title || "Nuova chiamata",
-        body: body || "Sei stato chiamato"
-      }
-    };
-    const result = await admin.messaging().send(message);
-    return res.json({ ok: true, result });
+    const payloadData = {};
+    Object.keys(data || {}).forEach((key) => {
+      payloadData[key] = String(data[key]);
+    });
+    const sendResults = await Promise.all(targetTokens.map((targetToken) => {
+      const message = {
+        token: targetToken,
+        notification: {
+          title: title || "Nuova chiamata",
+          body: body || "Sei stato chiamato"
+        },
+        data: payloadData
+      };
+      return admin.messaging().send(message);
+    }));
+    return res.json({ ok: true, result: sendResults });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
