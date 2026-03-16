@@ -205,6 +205,10 @@ function isOnlineMode() {
   return hasFirebaseConfig && hasFirebaseSdk;
 }
 
+function isRemoteStateReady() {
+  return !isOnlineMode() || hasInitialRemoteSnapshot;
+}
+
 function normalizeTournament(tournament) {
   return {
     id: tournament.id,
