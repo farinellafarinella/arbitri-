@@ -122,10 +122,14 @@ function saveState(state) {
   normalized.updatedAt = Date.now();
   if (hasFirebaseConfig && hasFirebaseSdk) {
     const sanitized = sanitizeState(normalized);
-    stateCache = sanitized;
-    persistRemoteCache(sanitized);
-    pendingState = sanitized;
-    if (hasInitialRemoteSnapshot) scheduleWrite(sanitized);
+    const baseState = hasMeaningfulState(stateCache)
+      ? stateCache
+      : (loadPersistedRemoteCache() || { tournaments: [], refereesRegistry: [], updatedAt: 0 });
+    const mergedState = mergePendingState(baseState, sanitized);
+    stateCache = mergedState;
+    persistRemoteCache(mergedState);
+    pendingState = mergedState;
+    if (hasInitialRemoteSnapshot) scheduleWrite(mergedState);
     return;
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
