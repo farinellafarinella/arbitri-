@@ -30,6 +30,14 @@
           </div>
 
           <div class="card">
+            <h2>Notifiche Push</h2>
+            <div class="row">
+              <button id="enablePushBtn">Attiva notifiche sul telefono</button>
+            </div>
+            <div id="pushStatus" class="muted">Notifiche push non attive.</div>
+          </div>
+
+          <div class="card">
             <h2>Assegnazioni attive</h2>
             <div id="assignedArenaList" class="list"></div>
             <div id="refereeMessage" class="muted"></div>
@@ -42,6 +50,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
     <script src="state.js?v=20260302"></script>
     <script src="status.js?v=20260302"></script>
     <script src="auth.js?v=20260316"></script>
