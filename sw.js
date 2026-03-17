@@ -2,7 +2,7 @@ importScripts("firebase-config-sw.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
 
-const CACHE_NAME = "arbitri-arene-v24";
+const CACHE_NAME = "arbitri-arene-v26";
 const ASSETS = [
   "./",
   "index.html",
@@ -68,6 +68,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isAppShellAsset = isSameOrigin && (
+    event.request.mode === "navigate" ||
+    url.pathname.endsWith(".html") ||
+    url.pathname.endsWith(".js") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".json")
+  );
+
+  if (isAppShellAsset) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const cloned = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned)).catch(() => {});
+        return response;
+      }).catch(() =>
+        caches.match(event.request).then((cached) => cached || fetch(event.request))
+      )
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
