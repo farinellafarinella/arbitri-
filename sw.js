@@ -40,6 +40,7 @@ if (self.firebase && typeof firebase.messaging === "function") {
 
 if (messaging && typeof messaging.onBackgroundMessage === "function") {
   messaging.onBackgroundMessage((payload) => {
+    if (payload && payload.notification) return;
     const title = (payload.notification && payload.notification.title) || "Chiamata arena";
     const body = (payload.notification && payload.notification.body) || "Sei stato chiamato";
     const data = payload.data || {};
