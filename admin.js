@@ -28,6 +28,10 @@ const tournamentId = params.get("id");
 let tournament = findTournament(state, tournamentId);
 let currentUser = null;
 
+function notifyEndpoint() {
+  return String(window.NOTIFY_ENDPOINT || "/notify");
+}
+
 function removeInvalidPushTokens(refereeId, invalidTokens) {
   if (!refereeId || !Array.isArray(invalidTokens) || invalidTokens.length === 0) return;
   const latestState = loadState();
@@ -49,7 +53,7 @@ async function notifyArenaCall(arena) {
   if (!ref || tokens.length === 0) return;
   const url = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}arena.html?tid=${tournament.id}&id=${arena.id}`;
   try {
-    const response = await fetch("/notify", {
+    const response = await fetch(notifyEndpoint(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
