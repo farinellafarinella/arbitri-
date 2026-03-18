@@ -163,6 +163,7 @@ function createReferee(name, level = 1) {
     email: "",
     authUid: "",
     webPushToken: "",
+    webPushTokens: [],
     level,
     matchesArbitrated: 0,
     tournamentsArbitrated: [],
@@ -232,11 +233,23 @@ function normalizeRefereeRegistry(list) {
     email: ref.email || "",
     authUid: ref.authUid || "",
     webPushToken: ref.webPushToken || "",
+    webPushTokens: normalizePushTokens(ref.webPushTokens, ref.webPushToken),
     level: Number.isFinite(ref.level) ? ref.level : 1,
     matchesArbitrated: Number.isFinite(ref.matchesArbitrated) ? ref.matchesArbitrated : 0,
     tournamentsArbitrated: Array.isArray(ref.tournamentsArbitrated) ? ref.tournamentsArbitrated : [],
     exp: Number.isFinite(ref.exp) ? ref.exp : 0
   })).filter((ref) => ref.name);
+}
+
+function normalizePushTokens(tokens, legacyToken = "") {
+  const merged = [];
+  (Array.isArray(tokens) ? tokens : []).forEach((token) => {
+    const value = String(token || "").trim();
+    if (value && !merged.includes(value)) merged.push(value);
+  });
+  const fallback = String(legacyToken || "").trim();
+  if (fallback && !merged.includes(fallback)) merged.push(fallback);
+  return merged;
 }
 
 function getRefereeLevelInfo(exp) {
