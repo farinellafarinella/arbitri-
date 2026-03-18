@@ -28,23 +28,55 @@ const tournamentId = params.get("id");
 let tournament = findTournament(state, tournamentId);
 let currentUser = null;
 
-function notifyArenaCall(arena) {
+function removeInvalidPushTokens(refereeId, invalidTokens) {
+  if (!refereeId || !Array.isArray(invalidTokens) || invalidTokens.length === 0) return;
+  const latestState = loadState();
+  const ref = (latestState.refereesRegistry || []).find((item) => item.id === refereeId);
+  if (!ref) return;
+  const nextTokens = (Array.isArray(ref.webPushTokens) ? ref.webPushTokens : [ref.webPushToken])
+    .filter((value) => value && !invalidTokens.includes(value));
+  ref.webPushTokens = nextTokens;
+  ref.webPushToken = nextTokens[0] || "";
+  saveState(latestState);
+  state = latestState;
+}
+
+async function notifyArenaCall(arena) {
   const ref = (state.refereesRegistry || []).find((item) => item.id === arena.refereeId);
   const tokens = Array.isArray(ref && ref.webPushTokens)
     ? ref.webPushTokens.filter(Boolean)
     : [ref && ref.webPushToken].filter(Boolean);
   if (!ref || tokens.length === 0) return;
   const url = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}arena.html?tid=${tournament.id}&id=${arena.id}`;
-  fetch("/notify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tokens,
-      title: `Arena chiamata: ${arena.name}`,
-      body: arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Apri l'arena assegnata",
-      data: { url }
-    })
-  }).catch(() => {});
+  try {
+    const response = await fetch("/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tokens,
+        title: `Arena chiamata: ${arena.name}`,
+        body: arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Apri l'arena assegnata",
+        data: { url }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) {
+      const errorText = payload.error || `Invio notifica fallito (${response.status})`;
+      if (matchMessage) {
+        matchMessage.textContent = errorText;
+        matchMessage.classList.add("error");
+      }
+      console.error("Push notify error:", payload);
+      return;
+    }
+    removeInvalidPushTokens(ref.id, payload.invalidTokens || []);
+  } catch (error) {
+    if (matchMessage) {
+      matchMessage.textContent = "Errore di rete durante l'invio della notifica.";
+      matchMessage.classList.add("error");
+    }
+    console.error("Push notify network error:", error);
+  }
 }
 
 function render() {
