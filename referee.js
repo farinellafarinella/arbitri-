@@ -19,6 +19,24 @@ function getRegisteredPushTokens(referee = currentReferee) {
   return [referee.webPushToken].filter(Boolean);
 }
 
+async function sendPushTest(token) {
+  const response = await fetch("/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token,
+      title: "Test notifiche",
+      body: "Le notifiche push sono attive su questo dispositivo.",
+      data: { url: `${window.location.origin}${window.location.pathname}` }
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Invio test fallito (${response.status})`);
+  }
+  return payload;
+}
+
 function renderRefereeHome() {
   renderProfile();
   renderPushStatus();
@@ -159,9 +177,15 @@ async function enablePushNotifications() {
     ref.webPushTokens = tokens;
     saveState(latestState);
     currentReferee = ref;
-    renderPushStatus();
+    pushStatus.textContent = "Notifiche attive. Invio una notifica di test...";
+    await sendPushTest(token);
+    pushStatus.textContent = "Notifiche attive. Test inviato: se non arriva, il problema è sul dispositivo/browser o sull'installazione PWA.";
+    window.setTimeout(() => {
+      renderPushStatus();
+    }, 2500);
   } catch (error) {
-    pushStatus.textContent = "Errore nell'attivazione delle notifiche push.";
+    pushStatus.textContent = `Errore notifiche push: ${error && error.message ? error.message : "attivazione fallita"}`;
+    console.error("Push activation error:", error);
   }
 }
 
