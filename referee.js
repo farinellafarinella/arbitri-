@@ -1,65 +1,297 @@
-<!doctype html>
-<html lang="it">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
-    <title>Home Arbitro</title>
-    <link rel="apple-touch-icon" href="icon.png" />
-    <link rel="manifest" href="manifest.json?v=20260318b" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="top">
-        <div>
-          <h1 id="refereeTitle">Home Arbitro</h1>
-          <p id="refereeSubtitle">Caricamento profilo...</p>
-        </div>
-        <div class="row" style="gap:8px;">
-          <a class="arena-link" href="index.html">← Tornei</a>
-          <button id="logoutBtn">Logout</button>
-          <div id="connectionStatus" class="status ok">Locale</div>
-        </div>
-      </header>
+const refereeTitle = document.getElementById("refereeTitle");
+const refereeSubtitle = document.getElementById("refereeSubtitle");
+const refereeProfileCard = document.getElementById("refereeProfileCard");
+const enablePushBtn = document.getElementById("enablePushBtn");
+const pushStatus = document.getElementById("pushStatus");
+const assignedArenaList = document.getElementById("assignedArenaList");
+const refereeMessage = document.getElementById("refereeMessage");
+const logoutBtn = document.getElementById("logoutBtn");
 
-      <section class="grid">
-        <div class="panel">
-          <div class="card">
-            <h2>Il mio profilo</h2>
-            <div id="refereeProfileCard"></div>
-          </div>
+let state = loadState();
+let currentUser = null;
+let currentReferee = null;
+let redirectedArenaKey = "";
 
-          <div class="card">
-            <h2>Notifiche Push</h2>
-            <div class="muted">Android: installa l'app dal browser e poi attiva le notifiche. iPhone: apri in Safari, fai "Aggiungi a Home" e poi attiva le notifiche dall'app installata.</div>
-            <div class="row">
-              <button id="enablePushBtn">Attiva notifiche sul telefono</button>
-            </div>
-            <div id="pushStatus" class="muted">Notifiche push non attive.</div>
-          </div>
+function notifyEndpoint() {
+  return String(window.NOTIFY_ENDPOINT || "/notify");
+}
 
-          <div class="card">
-            <h2>Assegnazioni attive</h2>
-            <div id="assignedArenaList" class="list"></div>
-            <div id="refereeMessage" class="muted"></div>
-          </div>
-        </div>
-      </section>
+function getRegisteredPushTokens(referee = currentReferee) {
+  if (!referee) return [];
+  const tokens = Array.isArray(referee.webPushTokens) ? referee.webPushTokens : [];
+  if (tokens.length > 0) return tokens.filter(Boolean);
+  return [referee.webPushToken].filter(Boolean);
+}
+
+async function sendPushTest(token) {
+  const response = await fetch(notifyEndpoint(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token,
+      title: "Test notifiche",
+      body: "Le notifiche push sono attive su questo dispositivo.",
+      data: { url: `${window.location.origin}${window.location.pathname}` }
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Invio test fallito (${response.status})`);
+  }
+  return payload;
+}
+
+function renderRefereeHome() {
+  renderProfile();
+  renderPushStatus();
+  assignedArenaList.innerHTML = "";
+  refereeMessage.textContent = "";
+
+  if (!currentUser || !currentReferee) {
+    refereeTitle.textContent = "Home Arbitro";
+    refereeSubtitle.textContent = "Profilo non collegato.";
+    refereeMessage.textContent = "Questo account non è ancora associato a un arbitro.";
+    return;
+  }
+
+  refereeTitle.textContent = `Home Arbitro - ${currentReferee.name}`;
+  refereeSubtitle.textContent = currentUser.email || "Account attivo";
+
+  const items = [];
+  (state.tournaments || []).forEach((tournament) => {
+    (tournament.arenas || []).forEach((arena) => {
+      if (arena.refereeId === currentReferee.id) {
+        items.push({ tournament, arena });
+      }
+    });
+  });
+
+  if (items.length === 0) {
+    refereeMessage.textContent = "Nessuna arena assegnata al momento.";
+    return;
+  }
+
+  items.forEach(({ tournament, arena }) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    const actionHref = `arena.html?tid=${tournament.id}&id=${arena.id}`;
+    const actionLabel = arena.status === "called" ? "Apri arena adesso" : "Apri arena";
+    row.innerHTML = `
+      <strong>${tournament.name}</strong>
+      <div class="muted">Arena: ${arena.name}</div>
+      <div class="muted">Stato: ${statusLabel(arena.status)}</div>
+      <div class="muted">Match: ${arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "—"}</div>
+      <div class="row" style="margin-top:8px;">
+        <a class="arena-link" href="${actionHref}">${actionLabel}</a>
+      </div>
+    `;
+    assignedArenaList.appendChild(row);
+  });
+
+  const calledItems = items.filter(({ arena }) => arena.status === "called");
+  if (calledItems.length === 1) {
+    refereeMessage.textContent = `Sei stato chiamato su ${calledItems[0].arena.name}.`;
+    const arenaKey = `${calledItems[0].tournament.id}:${calledItems[0].arena.id}`;
+    if (redirectedArenaKey !== arenaKey) {
+      redirectedArenaKey = arenaKey;
+      window.location.href = `arena.html?tid=${calledItems[0].tournament.id}&id=${calledItems[0].arena.id}`;
+    }
+  } else if (calledItems.length > 1) {
+    refereeMessage.textContent = "Hai piu arene chiamate nello stesso momento.";
+    redirectedArenaKey = "";
+  } else {
+    redirectedArenaKey = "";
+  }
+}
+
+function pushSupported() {
+  return Boolean(
+    window.firebase &&
+    typeof firebase.messaging === "function" &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
+}
+
+function vapidConfigured() {
+  return Boolean(window.FCM_WEB_VAPID_KEY && window.FCM_WEB_VAPID_KEY !== "inserisci-vapid-public-key");
+}
+
+function renderPushStatus() {
+  if (!pushStatus || !enablePushBtn) return;
+  if (!pushSupported()) {
+    pushStatus.textContent = "Questo dispositivo/browser non supporta le notifiche push web.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (!vapidConfigured()) {
+    pushStatus.textContent = "Manca la VAPID key web in configurazione.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (!currentReferee) {
+    pushStatus.textContent = "Profilo arbitro non disponibile.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  if (getRegisteredPushTokens().length > 0) {
+    pushStatus.textContent = "Notifiche push attive su questo dispositivo/account.";
+    enablePushBtn.disabled = false;
+    enablePushBtn.textContent = "Aggiorna notifiche";
+    return;
+  }
+  if (Notification.permission === "denied") {
+    pushStatus.textContent = "Notifiche bloccate dal browser/dispositivo.";
+    enablePushBtn.disabled = true;
+    return;
+  }
+  pushStatus.textContent = "Attiva le notifiche push per ricevere la chiamata arena.";
+  enablePushBtn.disabled = false;
+  enablePushBtn.textContent = "Attiva notifiche sul telefono";
+}
+
+async function enablePushNotifications() {
+  if (!currentReferee || !pushSupported() || !vapidConfigured()) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      renderPushStatus();
+      return;
+    }
+    const registration = await navigator.serviceWorker.ready;
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({
+      vapidKey: window.FCM_WEB_VAPID_KEY,
+      serviceWorkerRegistration: registration
+    });
+    if (!token) {
+      pushStatus.textContent = "Impossibile ottenere il token push.";
+      return;
+    }
+    const latestState = loadState();
+    const ref = (latestState.refereesRegistry || []).find((item) => item.id === currentReferee.id);
+    if (!ref) {
+      pushStatus.textContent = "Profilo arbitro non trovato.";
+      return;
+    }
+    const tokens = getRegisteredPushTokens(ref);
+    if (!tokens.includes(token)) tokens.push(token);
+    ref.webPushToken = token;
+    ref.webPushTokens = tokens;
+    saveState(latestState);
+    currentReferee = ref;
+    pushStatus.textContent = "Notifiche attive. Invio una notifica di test...";
+    await sendPushTest(token);
+    pushStatus.textContent = "Notifiche attive. Test inviato: se non arriva, il problema è sul dispositivo/browser o sull'installazione PWA.";
+    window.setTimeout(() => {
+      renderPushStatus();
+    }, 2500);
+  } catch (error) {
+    pushStatus.textContent = `Errore notifiche push: ${error && error.message ? error.message : "attivazione fallita"}`;
+    console.error("Push activation error:", error);
+  }
+}
+
+function renderProfile() {
+  if (!refereeProfileCard) return;
+  if (!currentReferee) {
+    refereeProfileCard.innerHTML = `<div class="muted">Profilo non disponibile.</div>`;
+    return;
+  }
+
+  const levelInfo = getRefereeLevelInfo(currentReferee.exp || 0);
+  const progressTotal = Math.max(1, levelInfo.progressMax - levelInfo.progressMin);
+  const progressValue = Math.min(progressTotal, Math.max(0, (currentReferee.exp || 0) - levelInfo.progressMin));
+  const progressPercent = Math.round((progressValue / progressTotal) * 100);
+  const tournamentsCount = Array.isArray(currentReferee.tournamentsArbitrated)
+    ? currentReferee.tournamentsArbitrated.length
+    : 0;
+  const expToNextText = levelInfo.nextLevel
+    ? `EXP mancanti al prossimo livello: ${levelInfo.expToNext}`
+    : "Livello massimo raggiunto";
+
+  refereeProfileCard.innerHTML = `
+    <strong>${currentReferee.name}</strong>
+    <div class="muted">Email: ${currentUser && currentUser.email ? currentUser.email : "—"}</div>
+    <div class="muted">Livello: Lv. ${levelInfo.level} - ${levelInfo.title}</div>
+    <div class="muted">EXP: ${currentReferee.exp || 0}</div>
+    <div class="muted">${expToNextText}</div>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${progressTotal}" aria-valuenow="${progressValue}">
+      <div class="progress-bar" style="width:${progressPercent}%"></div>
     </div>
+    <div class="muted" style="margin-top:8px;">Partite arbitrate: ${currentReferee.matchesArbitrated || 0}</div>
+    <div class="muted">Tornei arbitrati: ${tournamentsCount}</div>
+  `;
+}
 
-    <script src="firebase-config.js?v=20260318b"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js"></script>
-    <script src="state.js?v=20260318b"></script>
-    <script src="status.js?v=20260318b"></script>
-    <script src="auth.js?v=20260318b"></script>
-    <script src="referee.js?v=20260318b"></script>
-    <script src="register-sw.js?v=20260318b"></script>
-  </body>
-</html>
+function statusLabel(status) {
+  if (status === "called") return "Chiamata";
+  if (status === "occupied") return "Occupata";
+  if (status === "standby") return "In attesa";
+  if (status === "expired") return "Scaduta";
+  return "Libera";
+}
+
+function syncReferee(user) {
+  currentUser = user;
+  if (getUserRole(user) === "admin") {
+    window.location.href = "index.html";
+    return;
+  }
+  currentReferee = upsertRefereeAccountProfile(user) || currentReferee;
+  renderRefereeHome();
+}
+
+function setupForegroundPushListener() {
+  if (!pushSupported()) return;
+  try {
+    const messaging = firebase.messaging();
+    if (!messaging || typeof messaging.onMessage !== "function") return;
+    messaging.onMessage(async (payload) => {
+      const title = (payload.notification && payload.notification.title) || "Nuova chiamata";
+      const body = (payload.notification && payload.notification.body) || "Apri l'app per vedere i dettagli.";
+      const data = payload.data || {};
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, { body, data });
+    });
+  } catch {
+    // ignore foreground push setup failures
+  }
+}
+
+requireAuthPage({
+  message: refereeMessage,
+  onUser(user) {
+    syncReferee(user);
+  }
+});
+
+subscribeState((newState) => {
+  state = newState;
+  if (currentUser) {
+    currentReferee = (state.refereesRegistry || []).find((ref) => ref.authUid === currentUser.uid) || currentReferee;
+    if (!currentReferee && isRemoteStateReady()) {
+      currentReferee = upsertRefereeAccountProfile(currentUser, currentUser.displayName || "");
+    }
+  }
+  renderRefereeHome();
+});
+
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    const auth = getFirebaseAuth();
+    if (!auth) return;
+    clearActiveUserRole();
+    clearRequestedLoginRole();
+    await auth.signOut();
+    window.location.href = "login.html";
+  });
+}
+
+if (enablePushBtn) {
+  enablePushBtn.addEventListener("click", enablePushNotifications);
+}
+
+setupForegroundPushListener();
+renderRefereeHome();
