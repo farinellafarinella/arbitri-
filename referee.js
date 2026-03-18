@@ -12,6 +12,10 @@ let currentUser = null;
 let currentReferee = null;
 let redirectedArenaKey = "";
 
+function notifyEndpoint() {
+  return String(window.NOTIFY_ENDPOINT || "/notify");
+}
+
 function getRegisteredPushTokens(referee = currentReferee) {
   if (!referee) return [];
   const tokens = Array.isArray(referee.webPushTokens) ? referee.webPushTokens : [];
@@ -20,7 +24,7 @@ function getRegisteredPushTokens(referee = currentReferee) {
 }
 
 async function sendPushTest(token) {
-  const response = await fetch("/notify", {
+  const response = await fetch(notifyEndpoint(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
