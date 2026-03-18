@@ -12,6 +12,13 @@ let currentUser = null;
 let currentReferee = null;
 let redirectedArenaKey = "";
 
+function getRegisteredPushTokens(referee = currentReferee) {
+  if (!referee) return [];
+  const tokens = Array.isArray(referee.webPushTokens) ? referee.webPushTokens : [];
+  if (tokens.length > 0) return tokens.filter(Boolean);
+  return [referee.webPushToken].filter(Boolean);
+}
+
 function renderRefereeHome() {
   renderProfile();
   renderPushStatus();
@@ -92,7 +99,7 @@ function vapidConfigured() {
 function renderPushStatus() {
   if (!pushStatus || !enablePushBtn) return;
   if (!pushSupported()) {
-    pushStatus.textContent = "Questo dispositivo non supporta le notifiche push web.";
+    pushStatus.textContent = "Questo dispositivo/browser non supporta le notifiche push web.";
     enablePushBtn.disabled = true;
     return;
   }
@@ -106,9 +113,10 @@ function renderPushStatus() {
     enablePushBtn.disabled = true;
     return;
   }
-  if (currentReferee.webPushToken) {
-    pushStatus.textContent = "Notifiche push attive su questo dispositivo.";
-    enablePushBtn.disabled = true;
+  if (getRegisteredPushTokens().length > 0) {
+    pushStatus.textContent = "Notifiche push attive su questo dispositivo/account.";
+    enablePushBtn.disabled = false;
+    enablePushBtn.textContent = "Aggiorna notifiche";
     return;
   }
   if (Notification.permission === "denied") {
@@ -118,6 +126,7 @@ function renderPushStatus() {
   }
   pushStatus.textContent = "Attiva le notifiche push per ricevere la chiamata arena.";
   enablePushBtn.disabled = false;
+  enablePushBtn.textContent = "Attiva notifiche sul telefono";
 }
 
 async function enablePushNotifications() {
@@ -144,7 +153,10 @@ async function enablePushNotifications() {
       pushStatus.textContent = "Profilo arbitro non trovato.";
       return;
     }
+    const tokens = getRegisteredPushTokens(ref);
+    if (!tokens.includes(token)) tokens.push(token);
     ref.webPushToken = token;
+    ref.webPushTokens = tokens;
     saveState(latestState);
     currentReferee = ref;
     renderPushStatus();
@@ -203,6 +215,23 @@ function syncReferee(user) {
   renderRefereeHome();
 }
 
+function setupForegroundPushListener() {
+  if (!pushSupported()) return;
+  try {
+    const messaging = firebase.messaging();
+    if (!messaging || typeof messaging.onMessage !== "function") return;
+    messaging.onMessage(async (payload) => {
+      const title = (payload.notification && payload.notification.title) || "Nuova chiamata";
+      const body = (payload.notification && payload.notification.body) || "Apri l'app per vedere i dettagli.";
+      const data = payload.data || {};
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, { body, data });
+    });
+  } catch {
+    // ignore foreground push setup failures
+  }
+}
+
 requireAuthPage({
   message: refereeMessage,
   onUser(user) {
@@ -236,4 +265,5 @@ if (enablePushBtn) {
   enablePushBtn.addEventListener("click", enablePushNotifications);
 }
 
+setupForegroundPushListener();
 renderRefereeHome();
