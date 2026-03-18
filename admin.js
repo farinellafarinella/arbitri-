@@ -30,13 +30,16 @@ let currentUser = null;
 
 function notifyArenaCall(arena) {
   const ref = (state.refereesRegistry || []).find((item) => item.id === arena.refereeId);
-  if (!ref || !ref.webPushToken) return;
+  const tokens = Array.isArray(ref && ref.webPushTokens)
+    ? ref.webPushTokens.filter(Boolean)
+    : [ref && ref.webPushToken].filter(Boolean);
+  if (!ref || tokens.length === 0) return;
   const url = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/")}arena.html?tid=${tournament.id}&id=${arena.id}`;
   fetch("/notify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      token: ref.webPushToken,
+      tokens,
       title: `Arena chiamata: ${arena.name}`,
       body: arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Apri l'arena assegnata",
       data: { url }
