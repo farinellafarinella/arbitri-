@@ -23,25 +23,57 @@ admin.initializeApp({
 
 app.post("/notify", async (req, res) => {
   const { token, tokens, title, body, data } = req.body || {};
-  const targetTokens = Array.isArray(tokens) ? tokens.filter(Boolean) : [token].filter(Boolean);
+  const targetTokens = Array.from(new Set(
+    (Array.isArray(tokens) ? tokens : [token])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
   if (targetTokens.length === 0) return res.status(400).json({ error: "Missing token" });
   try {
     const payloadData = {};
     Object.keys(data || {}).forEach((key) => {
       payloadData[key] = String(data[key]);
     });
-    const sendResults = await Promise.all(targetTokens.map((targetToken) => {
-      const message = {
-        token: targetToken,
+    const link = payloadData.url || "/";
+    const message = {
+      tokens: targetTokens,
+      data: payloadData,
+      webpush: {
+        headers: {
+          Urgency: "high"
+        },
         notification: {
           title: title || "Nuova chiamata",
-          body: body || "Sei stato chiamato"
+          body: body || "Sei stato chiamato",
+          icon: "/icon.png",
+          badge: "/icon.png",
+          requireInteraction: true,
+          data: payloadData
         },
-        data: payloadData
-      };
-      return admin.messaging().send(message);
+        fcmOptions: {
+          link
+        }
+      }
+    };
+    const result = await admin.messaging().sendEachForMulticast(message);
+    const responses = result.responses.map((item, index) => ({
+      token: targetTokens[index],
+      success: item.success,
+      messageId: item.success ? item.messageId : "",
+      error: item.success ? "" : (item.error && item.error.message) || "Unknown error",
+      code: item.success ? "" : (item.error && item.error.code) || ""
     }));
-    return res.json({ ok: true, result: sendResults });
+    const invalidTokens = responses
+      .filter((item) => item.code === "messaging/registration-token-not-registered" || item.code === "messaging/invalid-registration-token")
+      .map((item) => item.token);
+    return res.json({
+      ok: result.successCount > 0,
+      requested: targetTokens.length,
+      successCount: result.successCount,
+      failureCount: result.failureCount,
+      invalidTokens,
+      responses
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err) });
   }
