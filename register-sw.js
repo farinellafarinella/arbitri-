@@ -1,6 +1,8 @@
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then((registration) => {
+    const basePath = window.location.pathname.replace(/\/[^/]*$/, "/");
+    const serviceWorkerUrl = `${basePath}sw.js`;
+    navigator.serviceWorker.register(serviceWorkerUrl, { scope: basePath }).then((registration) => {
       registration.update().catch(() => {});
     }).catch(() => {});
   });
