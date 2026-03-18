@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
+    <title>Tornei (Offline)</title>
+    <link rel="apple-touch-icon" href="icon.png" />
+    <link rel="manifest" href="manifest.json?v=20260318f" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1>Tornei</h1>
+          <p>Crea e gestisci più tornei. Funziona offline.</p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <a class="arena-link" href="login.html">Login arbitri</a>
+          <a class="arena-link" href="referee.html">Home arbitro</a>
+          <div id="connectionStatus" class="status ok">Locale</div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="card">
+            <h2>Crea torneo</h2>
+            <div class="row">
+              <input id="tournamentName" placeholder="Nome torneo" />
+              <button id="addTournamentBtn">Crea</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Albo arbitri</h2>
+            <div class="muted">L'albo mostra solo arbitri che hanno fatto login come arbitri.</div>
+            <div class="row" style="margin-top:6px;">
+              <button id="toggleRegistryBtn">Mostra albo</button>
+            </div>
+            <div id="registryPanelBody" class="hidden">
+              <div id="registryRefereeList" class="list"></div>
+              <div id="registryRefereeMessage" class="muted"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="card">
+            <h2>Tornei attivi</h2>
+            <div id="tournamentList" class="list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="firebase-config.js?v=20260318f"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="state.js?v=20260318f"></script>
+    <script src="status.js?v=20260318f"></script>
+    <script src="auth.js?v=20260318f"></script>
+    <script src="tournaments.js?v=20260318f"></script>
+    <script src="register-sw.js?v=20260318f"></script>
+  </body>
+</html>

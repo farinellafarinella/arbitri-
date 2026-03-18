@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
+    <title>Stato Arene</title>
+    <link rel="apple-touch-icon" href="icon.png" />
+    <link rel="manifest" href="manifest.json?v=20260318f" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1 id="kioskTitle">Stato Arene</h1>
+          <p>Vista sala</p>
+        </div>
+        <div id="connectionStatus" class="status ok">Locale</div>
+      </header>
+
+      <section class="panel">
+        <div id="kioskBanner" class="kiosk-banner hidden"></div>
+        <div id="kioskGrid" class="kiosk-grid"></div>
+      </section>
+    </div>
+
+    <script src="firebase-config.js?v=20260318f"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="state.js?v=20260318f"></script>
+    <script src="status.js?v=20260318f"></script>
+    <script src="kiosk.js?v=20260318f"></script>
+    <script src="register-sw.js?v=20260318f"></script>
+  </body>
+</html>

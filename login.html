@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
+    <title>Login Arbitri</title>
+    <link rel="apple-touch-icon" href="icon.png" />
+    <link rel="manifest" href="manifest.json?v=20260318f" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div>
+          <h1>Login Arbitri</h1>
+          <p>Accedi con email e password. Il nome arbitro serve solo alla registrazione.</p>
+        </div>
+        <div class="row" style="gap:8px;">
+          <a class="arena-link" href="index.html">← Tornei</a>
+          <div id="connectionStatus" class="status ok">Locale</div>
+        </div>
+      </header>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="card">
+            <h2>Accedi</h2>
+            <div class="row">
+              <input id="loginEmail" type="email" placeholder="Email" />
+            </div>
+            <div class="row">
+              <input id="loginPassword" type="password" placeholder="Password" />
+            </div>
+            <div class="row">
+              <label class="muted" style="display:flex; align-items:center; gap:8px;">
+                <input id="loginAsAdmin" type="checkbox" />
+                Entra come Organizzatore
+              </label>
+            </div>
+            <div class="row">
+              <button id="loginBtn">Login</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Registrazione arbitro</h2>
+            <div class="row">
+              <input id="registerName" placeholder="Nome arbitro" />
+            </div>
+            <div class="row">
+              <input id="registerEmail" type="email" placeholder="Email" />
+            </div>
+            <div class="row">
+              <input id="registerPassword" type="password" placeholder="Password" />
+            </div>
+            <div class="row">
+              <button id="registerBtn">Registrati</button>
+            </div>
+            <div id="loginMessage" class="muted"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="firebase-config.js?v=20260318f"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+    <script src="state.js?v=20260318f"></script>
+    <script src="status.js?v=20260318f"></script>
+    <script src="auth.js?v=20260318f"></script>
+    <script src="login.js?v=20260318f"></script>
+    <script src="register-sw.js?v=20260318f"></script>
+  </body>
+</html>

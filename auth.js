@@ -168,7 +168,10 @@ function upsertRefereeAccountProfile(user, displayName) {
 
   referee.authUid = user.uid;
   referee.email = user.email || referee.email || "";
-  if (normalizedName) referee.name = normalizedName;
+  if (normalizedName) {
+    referee.accountDisplayName = normalizedName;
+    if (!referee.name) referee.name = normalizedName;
+  }
 
   saveState(state);
   return referee;
