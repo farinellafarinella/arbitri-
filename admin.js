@@ -51,6 +51,16 @@ function challongeReportEndpoint(matchId) {
   return `${challongeApiBase()}/challonge/matches/${encodeURIComponent(matchId)}/report`;
 }
 
+function challongeStateLabel(state) {
+  const value = String(state || "").trim().toLowerCase();
+  if (value === "underway") return "in corso";
+  if (value === "pending") return "in attesa";
+  if (value === "complete") return "completato";
+  if (value === "checking_in") return "check-in aperto";
+  if (value === "checked_in") return "check-in chiuso";
+  return value || "sconosciuto";
+}
+
 function setChallongeStatus(text, isError = false) {
   if (!challongeStatus) return;
   challongeStatus.textContent = text;
@@ -214,7 +224,9 @@ async function syncChallongeTournament(options = {}) {
     saveState(state);
     render();
     if (!options.silent) {
-      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti, torneo ${payload.state || "sconosciuto"}.`);
+      const challongeName = String(payload.name || tournament.name || "senza nome").trim();
+      const challongeState = challongeStateLabel(payload.state);
+      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti. Torneo: ${challongeName}. Stato: ${challongeState}.`);
     }
     return true;
   } catch (error) {
