@@ -69,13 +69,36 @@ function parseChallongeReference(input) {
     const url = new URL(raw);
     const pathParts = url.pathname.split("/").filter(Boolean);
     if (pathParts.length === 0) return "";
+    const ignoredSegments = new Set([
+      "tournaments",
+      "tournament",
+      "underway",
+      "pending",
+      "completed",
+      "show",
+      "matches",
+      "participants",
+      "standings",
+      "bracket",
+      "brackets"
+    ]);
+    let slug = pathParts[pathParts.length - 1] || "";
+    while (pathParts.length > 1 && ignoredSegments.has(String(slug).toLowerCase())) {
+      pathParts.pop();
+      slug = pathParts[pathParts.length - 1] || "";
+    }
+    if (/^[a-z]{2}(?:-[a-z]{2})?$/i.test(slug) && pathParts.length > 1) {
+      pathParts.pop();
+      slug = pathParts[pathParts.length - 1] || "";
+    }
+    if (!slug) return "";
     const subdomain = url.hostname.endsWith(".challonge.com")
       ? url.hostname.replace(/\.challonge\.com$/i, "")
       : "";
     if (subdomain && subdomain !== "www" && subdomain !== "challonge") {
-      return `${subdomain}-${pathParts[0]}`;
+      return `${subdomain}-${slug}`;
     }
-    return pathParts[0];
+    return slug;
   } catch {
     return raw;
   }
