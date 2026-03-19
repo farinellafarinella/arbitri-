@@ -119,12 +119,18 @@ function loadState() {
 
 function saveState(state) {
   const normalized = normalizeState(state);
-  normalized.updatedAt = Date.now();
   if (hasFirebaseConfig && hasFirebaseSdk) {
-    const sanitized = sanitizeState(normalized);
     const baseState = hasMeaningfulState(stateCache)
       ? stateCache
       : (loadPersistedRemoteCache() || { tournaments: [], refereesRegistry: [], updatedAt: 0 });
+    const sanitized = sanitizeState(normalized);
+    if (sameMeaningfulState(baseState, sanitized)) {
+      stateCache = sanitizeState(baseState);
+      persistRemoteCache(stateCache);
+      pendingState = null;
+      return;
+    }
+    sanitized.updatedAt = Date.now();
     const mergedState = mergePendingState(baseState, sanitized);
     stateCache = mergedState;
     persistRemoteCache(mergedState);
@@ -132,6 +138,7 @@ function saveState(state) {
     if (hasInitialRemoteSnapshot) scheduleWrite(mergedState);
     return;
   }
+  normalized.updatedAt = Date.now();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
 }
 
@@ -144,10 +151,14 @@ function subscribeState(callback) {
   });
 }
 
-function createTournament(name) {
+function createTournament(name, challongeUrl = "") {
   return {
     id: `tournament-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     name,
+    challongeUrl,
+    challongeState: "",
+    challongeSyncedAt: 0,
+    challongeOpenMatches: [],
     players: [],
     arenas: [],
     referees: [],
@@ -219,11 +230,28 @@ function normalizeTournament(tournament) {
   return {
     id: tournament.id,
     name: tournament.name,
+    challongeUrl: tournament.challongeUrl || "",
+    challongeState: tournament.challongeState || "",
+    challongeSyncedAt: Number.isFinite(tournament.challongeSyncedAt) ? tournament.challongeSyncedAt : 0,
+    challongeOpenMatches: normalizeChallongeOpenMatches(tournament.challongeOpenMatches),
     players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
     referees: tournament.referees || [],
     refereeIds: Array.isArray(tournament.refereeIds) ? tournament.refereeIds : []
   };
+}
+
+function normalizeChallongeOpenMatches(list) {
+  return (Array.isArray(list) ? list : []).map((match) => ({
+    id: match.id,
+    identifier: match.identifier || "",
+    round: Number.isFinite(match.round) ? match.round : 0,
+    state: match.state || "open",
+    player1Id: match.player1Id || "",
+    player2Id: match.player2Id || "",
+    player1Name: match.player1Name || "",
+    player2Name: match.player2Name || ""
+  })).filter((match) => match.id && match.player1Name && match.player2Name);
 }
 
 function normalizeRefereeRegistry(list) {
@@ -438,6 +466,16 @@ function sanitizeState(state) {
     console.error("State sanitize error:", err);
     return { tournaments: [], refereesRegistry: [], updatedAt: 0 };
   }
+}
+
+function comparableState(state) {
+  const comparable = sanitizeState(state);
+  comparable.updatedAt = 0;
+  return comparable;
+}
+
+function sameMeaningfulState(left, right) {
+  return JSON.stringify(comparableState(left)) === JSON.stringify(comparableState(right));
 }
 
 function emitRealtimeStatus(next) {

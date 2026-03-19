@@ -1,6 +1,9 @@
 const refereeTitle = document.getElementById("refereeTitle");
 const refereeSubtitle = document.getElementById("refereeSubtitle");
 const refereeProfileCard = document.getElementById("refereeProfileCard");
+const refereeNameInput = document.getElementById("refereeNameInput");
+const saveRefereeNameBtn = document.getElementById("saveRefereeNameBtn");
+const refereeProfileStatus = document.getElementById("refereeProfileStatus");
 const enablePushBtn = document.getElementById("enablePushBtn");
 const pushStatus = document.getElementById("pushStatus");
 const assignedArenaList = document.getElementById("assignedArenaList");
@@ -11,24 +14,71 @@ let state = loadState();
 let currentUser = null;
 let currentReferee = null;
 let redirectedArenaKey = "";
+let pushPublicKeyPromise = null;
+let profileStatusMessage = "";
+let profileStatusIsError = false;
 
 function notifyEndpoint() {
   return String(window.NOTIFY_ENDPOINT || "/notify");
 }
 
-function getRegisteredPushTokens(referee = currentReferee) {
-  if (!referee) return [];
-  const tokens = Array.isArray(referee.webPushTokens) ? referee.webPushTokens : [];
-  if (tokens.length > 0) return tokens.filter(Boolean);
-  return [referee.webPushToken].filter(Boolean);
+function pushConfigEndpoint() {
+  const endpoint = new URL(notifyEndpoint(), window.location.href);
+  return `${endpoint.origin}/push-public-key`;
 }
 
-async function sendPushTest(token) {
+function getRegisteredPushSubscriptions(referee = currentReferee) {
+  if (!referee) return [];
+  return Array.isArray(referee.webPushSubscriptions) ? referee.webPushSubscriptions.filter(Boolean) : [];
+}
+
+function normalizePushSubscription(subscription) {
+  if (!subscription || typeof subscription !== "object") return null;
+  const json = typeof subscription.toJSON === "function" ? subscription.toJSON() : subscription;
+  if (!json || typeof json !== "object") return null;
+  const endpoint = String(json.endpoint || "").trim();
+  const keys = json.keys && typeof json.keys === "object" ? json.keys : {};
+  const p256dh = String(keys.p256dh || "").trim();
+  const auth = String(keys.auth || "").trim();
+  if (!endpoint || !p256dh || !auth) return null;
+  return {
+    endpoint,
+    expirationTime: json.expirationTime == null ? null : Number(json.expirationTime),
+    keys: { p256dh, auth }
+  };
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
+}
+
+async function getPushPublicKey() {
+  if (pushPublicKeyPromise) return pushPublicKeyPromise;
+  pushPublicKeyPromise = fetch(pushConfigEndpoint())
+    .then((response) => response.json().catch(() => ({})).then((payload) => ({ response, payload })))
+    .then(({ response, payload }) => {
+      const publicKey = String(payload.publicKey || "").trim();
+      if (!response.ok || !payload.ok || !publicKey) {
+        throw new Error(payload.error || "Public key notifiche non disponibile.");
+      }
+      return publicKey;
+    })
+    .catch((error) => {
+      pushPublicKeyPromise = null;
+      throw error;
+    });
+  return pushPublicKeyPromise;
+}
+
+async function sendPushTest(subscription) {
   const response = await fetch(notifyEndpoint(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      token,
+      subscription,
       title: "Test notifiche",
       body: "Le notifiche push sono attive su questo dispositivo.",
       data: { url: `${window.location.origin}${window.location.pathname}` }
@@ -39,6 +89,49 @@ async function sendPushTest(token) {
     throw new Error(payload.error || `Invio test fallito (${response.status})`);
   }
   return payload;
+}
+
+function setProfileStatus(text = "", isError = false) {
+  profileStatusMessage = text;
+  profileStatusIsError = isError;
+  if (!refereeProfileStatus) return;
+  refereeProfileStatus.textContent = text || "Usa qui il nome arbitro esatto usato su Challonge.";
+  refereeProfileStatus.classList.toggle("error", Boolean(text) && isError);
+}
+
+function updateAssignedArenaNames(stateValue, refereeId, nextName, previousName) {
+  (stateValue.tournaments || []).forEach((tournament) => {
+    (tournament.arenas || []).forEach((arena) => {
+      const sameReferee = arena.refereeId === refereeId;
+      const legacySameName = !arena.refereeId && previousName && arena.refereeName === previousName;
+      if (!sameReferee && !legacySameName) return;
+      arena.refereeName = nextName;
+      if (!arena.refereeId) arena.refereeId = refereeId;
+    });
+  });
+}
+
+async function saveRefereeName() {
+  if (!currentReferee) return;
+  const nextName = String(refereeNameInput && refereeNameInput.value || "").trim();
+  if (!nextName) {
+    setProfileStatus("Inserisci il nome arbitro esatto usato su Challonge.", true);
+    return;
+  }
+  const latestState = loadState();
+  const ref = (latestState.refereesRegistry || []).find((item) => item.id === currentReferee.id);
+  if (!ref) {
+    setProfileStatus("Profilo arbitro non trovato.", true);
+    return;
+  }
+  const previousName = ref.name || "";
+  ref.name = nextName;
+  updateAssignedArenaNames(latestState, ref.id, nextName, previousName);
+  saveState(latestState);
+  state = latestState;
+  currentReferee = ref;
+  setProfileStatus("Nome arbitro aggiornato.");
+  renderRefereeHome();
 }
 
 function renderRefereeHome() {
@@ -106,16 +199,15 @@ function renderRefereeHome() {
 
 function pushSupported() {
   return Boolean(
-    window.firebase &&
-    typeof firebase.messaging === "function" &&
     "Notification" in window &&
     "serviceWorker" in navigator &&
-    "PushManager" in window
+    "PushManager" in window &&
+    window.isSecureContext
   );
 }
 
 function vapidConfigured() {
-  return Boolean(window.FCM_WEB_VAPID_KEY && window.FCM_WEB_VAPID_KEY !== "inserisci-vapid-public-key");
+  return true;
 }
 
 function renderPushStatus() {
@@ -135,8 +227,8 @@ function renderPushStatus() {
     enablePushBtn.disabled = true;
     return;
   }
-  if (getRegisteredPushTokens().length > 0) {
-    pushStatus.textContent = "Notifiche push attive su questo dispositivo/account.";
+  if (getRegisteredPushSubscriptions().length > 0) {
+    pushStatus.textContent = "Notifiche push attive per questo account.";
     enablePushBtn.disabled = false;
     enablePushBtn.textContent = "Aggiorna notifiche";
     return;
@@ -160,13 +252,17 @@ async function enablePushNotifications() {
       return;
     }
     const registration = await navigator.serviceWorker.ready;
-    const messaging = firebase.messaging();
-    const token = await messaging.getToken({
-      vapidKey: window.FCM_WEB_VAPID_KEY,
-      serviceWorkerRegistration: registration
-    });
-    if (!token) {
-      pushStatus.textContent = "Impossibile ottenere il token push.";
+    const publicKey = await getPushPublicKey();
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
+    const normalizedSubscription = normalizePushSubscription(subscription);
+    if (!normalizedSubscription) {
+      pushStatus.textContent = "Impossibile ottenere la subscription push.";
       return;
     }
     const latestState = loadState();
@@ -175,15 +271,19 @@ async function enablePushNotifications() {
       pushStatus.textContent = "Profilo arbitro non trovato.";
       return;
     }
-    const tokens = getRegisteredPushTokens(ref);
-    if (!tokens.includes(token)) tokens.push(token);
-    ref.webPushToken = token;
-    ref.webPushTokens = tokens;
+    const subscriptions = getRegisteredPushSubscriptions(ref);
+    const alreadyIndex = subscriptions.findIndex((item) => item.endpoint === normalizedSubscription.endpoint);
+    if (alreadyIndex === -1) {
+      subscriptions.push(normalizedSubscription);
+    } else {
+      subscriptions[alreadyIndex] = normalizedSubscription;
+    }
+    ref.webPushSubscriptions = subscriptions;
     saveState(latestState);
     currentReferee = ref;
     pushStatus.textContent = "Notifiche attive. Invio una notifica di test...";
-    await sendPushTest(token);
-    pushStatus.textContent = "Notifiche attive. Test inviato: se non arriva, il problema è sul dispositivo/browser o sull'installazione PWA.";
+    await sendPushTest(normalizedSubscription);
+    pushStatus.textContent = "Notifiche attive. Test inviato.";
     window.setTimeout(() => {
       renderPushStatus();
     }, 2500);
@@ -193,10 +293,39 @@ async function enablePushNotifications() {
   }
 }
 
+async function showForegroundNotification(payload) {
+  const title = String(payload && payload.title ? payload.title : "Nuova chiamata");
+  const body = String(payload && payload.body ? payload.body : "Apri l'app per vedere i dettagli.");
+  const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
+  const registration = await navigator.serviceWorker.ready;
+  await registration.showNotification(title, {
+    body,
+    data,
+    icon: "icon.png",
+    badge: "icon.png",
+    requireInteraction: true
+  });
+}
+
+function setupForegroundPushListener() {
+  if (!pushSupported()) return;
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const payload = event.data && event.data.type === "push:received" ? event.data.payload : null;
+    if (!payload || document.visibilityState !== "visible") return;
+    showForegroundNotification(payload).catch(() => {});
+  });
+}
+
 function renderProfile() {
   if (!refereeProfileCard) return;
   if (!currentReferee) {
     refereeProfileCard.innerHTML = `<div class="muted">Profilo non disponibile.</div>`;
+    if (refereeNameInput) {
+      refereeNameInput.value = "";
+      refereeNameInput.disabled = true;
+    }
+    if (saveRefereeNameBtn) saveRefereeNameBtn.disabled = true;
+    setProfileStatus("");
     return;
   }
 
@@ -213,6 +342,7 @@ function renderProfile() {
 
   refereeProfileCard.innerHTML = `
     <strong>${currentReferee.name}</strong>
+    <div class="muted">Nome account: ${currentReferee.accountDisplayName || currentUser && currentUser.displayName || "—"}</div>
     <div class="muted">Email: ${currentUser && currentUser.email ? currentUser.email : "—"}</div>
     <div class="muted">Livello: Lv. ${levelInfo.level} - ${levelInfo.title}</div>
     <div class="muted">EXP: ${currentReferee.exp || 0}</div>
@@ -223,6 +353,12 @@ function renderProfile() {
     <div class="muted" style="margin-top:8px;">Partite arbitrate: ${currentReferee.matchesArbitrated || 0}</div>
     <div class="muted">Tornei arbitrati: ${tournamentsCount}</div>
   `;
+  if (refereeNameInput) {
+    refereeNameInput.disabled = false;
+    refereeNameInput.value = currentReferee.name || "";
+  }
+  if (saveRefereeNameBtn) saveRefereeNameBtn.disabled = false;
+  setProfileStatus(profileStatusMessage, profileStatusIsError);
 }
 
 function statusLabel(status) {
@@ -241,23 +377,6 @@ function syncReferee(user) {
   }
   currentReferee = upsertRefereeAccountProfile(user) || currentReferee;
   renderRefereeHome();
-}
-
-function setupForegroundPushListener() {
-  if (!pushSupported()) return;
-  try {
-    const messaging = firebase.messaging();
-    if (!messaging || typeof messaging.onMessage !== "function") return;
-    messaging.onMessage(async (payload) => {
-      const title = (payload.notification && payload.notification.title) || "Nuova chiamata";
-      const body = (payload.notification && payload.notification.body) || "Apri l'app per vedere i dettagli.";
-      const data = payload.data || {};
-      const registration = await navigator.serviceWorker.ready;
-      await registration.showNotification(title, { body, data });
-    });
-  } catch {
-    // ignore foreground push setup failures
-  }
 }
 
 requireAuthPage({
@@ -291,6 +410,18 @@ if (logoutBtn) {
 
 if (enablePushBtn) {
   enablePushBtn.addEventListener("click", enablePushNotifications);
+}
+
+if (saveRefereeNameBtn) {
+  saveRefereeNameBtn.addEventListener("click", saveRefereeName);
+}
+
+if (refereeNameInput) {
+  refereeNameInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    saveRefereeName();
+  });
 }
 
 setupForegroundPushListener();

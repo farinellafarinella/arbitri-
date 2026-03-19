@@ -108,10 +108,12 @@ function requireAuthPage(elements) {
       window.location.href = "login.html";
       return;
     }
-    setProtectedPageVisible(true);
-    if (typeof elements.onUser === "function") {
-      elements.onUser(user);
-    }
+    runWhenRemoteStateReady(() => {
+      setProtectedPageVisible(true);
+      if (typeof elements.onUser === "function") {
+        elements.onUser(user);
+      }
+    });
   });
 }
 
@@ -134,11 +136,26 @@ function requireRole(options) {
       window.location.href = role === "admin" ? "index.html" : "referee.html";
       return;
     }
-    setProtectedPageVisible(true);
-    if (typeof options.onUser === "function") {
-      options.onUser(user, role);
-    }
+    runWhenRemoteStateReady(() => {
+      setProtectedPageVisible(true);
+      if (typeof options.onUser === "function") {
+        options.onUser(user, role);
+      }
+    });
   });
+}
+
+function runWhenRemoteStateReady(callback) {
+  if (!isOnlineMode() || isRemoteStateReady()) {
+    callback();
+    return;
+  }
+  const handleReady = () => {
+    if (!isRemoteStateReady()) return;
+    window.removeEventListener("realtime:status", handleReady);
+    callback();
+  };
+  window.addEventListener("realtime:status", handleReady);
 }
 
 function upsertRefereeAccountProfile(user, displayName) {
@@ -148,6 +165,7 @@ function upsertRefereeAccountProfile(user, displayName) {
   const registry = state.refereesRegistry || [];
   const normalizedEmail = normalizeEmail(user.email);
   const normalizedName = (displayName || user.displayName || "").trim();
+  let changed = false;
 
   let referee = registry.find((ref) => ref.authUid === user.uid);
   if (!referee && normalizedEmail) {
@@ -164,15 +182,29 @@ function upsertRefereeAccountProfile(user, displayName) {
   if (!referee) {
     referee = createReferee(normalizedName || normalizedEmail || "Arbitro");
     registry.push(referee);
+    changed = true;
   }
 
-  referee.authUid = user.uid;
-  referee.email = user.email || referee.email || "";
+  if (referee.authUid !== user.uid) {
+    referee.authUid = user.uid;
+    changed = true;
+  }
+  const nextEmail = user.email || referee.email || "";
+  if (referee.email !== nextEmail) {
+    referee.email = nextEmail;
+    changed = true;
+  }
   if (normalizedName) {
-    referee.accountDisplayName = normalizedName;
-    if (!referee.name) referee.name = normalizedName;
+    if (referee.accountDisplayName !== normalizedName) {
+      referee.accountDisplayName = normalizedName;
+      changed = true;
+    }
+    if (!referee.name) {
+      referee.name = normalizedName;
+      changed = true;
+    }
   }
 
-  saveState(state);
+  if (changed) saveState(state);
   return referee;
 }

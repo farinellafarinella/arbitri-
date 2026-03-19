@@ -14,6 +14,12 @@ const player1Input = document.getElementById("player1Input");
 const player2Input = document.getElementById("player2Input");
 const setMatchBtn = document.getElementById("setMatchBtn");
 const matchMessage = document.getElementById("matchMessage");
+const challongeUrlInput = document.getElementById("challongeUrlInput");
+const saveChallongeUrlBtn = document.getElementById("saveChallongeUrlBtn");
+const syncChallongeBtn = document.getElementById("syncChallongeBtn");
+const loadNextChallongeMatchBtn = document.getElementById("loadNextChallongeMatchBtn");
+const challongeStatus = document.getElementById("challongeStatus");
+const challongeMatchList = document.getElementById("challongeMatchList");
 const playersFile = document.getElementById("playersFile");
 const importPlayersBtn = document.getElementById("importPlayersBtn");
 const clearPlayersBtn = document.getElementById("clearPlayersBtn");
@@ -27,9 +33,28 @@ const params = new URLSearchParams(window.location.search);
 const tournamentId = params.get("id");
 let tournament = findTournament(state, tournamentId);
 let currentUser = null;
+let challongeAutoSyncKey = "";
 
 function notifyEndpoint() {
   return String(window.NOTIFY_ENDPOINT || "/notify");
+}
+
+function challongeApiBase() {
+  return new URL(notifyEndpoint(), window.location.href).origin;
+}
+
+function challongeTournamentEndpoint() {
+  return `${challongeApiBase()}/challonge/tournament`;
+}
+
+function challongeReportEndpoint(matchId) {
+  return `${challongeApiBase()}/challonge/matches/${encodeURIComponent(matchId)}/report`;
+}
+
+function setChallongeStatus(text, isError = false) {
+  if (!challongeStatus) return;
+  challongeStatus.textContent = text;
+  challongeStatus.classList.toggle("error", isError);
 }
 
 function getRegisteredPushSubscriptions(referee) {
@@ -84,6 +109,201 @@ async function notifyArenaCall(arena) {
   }
 }
 
+function assignedChallongeMatchIds() {
+  const ids = new Set();
+  (tournament && tournament.arenas || []).forEach((arena) => {
+    const match = arena && arena.match;
+    if (match && match.source === "challonge" && match.challongeMatchId) {
+      ids.add(String(match.challongeMatchId));
+    }
+  });
+  return ids;
+}
+
+function availableChallongeMatches() {
+  if (!tournament) return [];
+  const assigned = assignedChallongeMatchIds();
+  return (Array.isArray(tournament.challongeOpenMatches) ? tournament.challongeOpenMatches : [])
+    .filter((match) => !assigned.has(String(match.id)));
+}
+
+function mergeTournamentPlayers(nextPlayers) {
+  if (!tournament) return;
+  if (!Array.isArray(tournament.players)) tournament.players = [];
+  nextPlayers.forEach((name) => {
+    const value = String(name || "").trim();
+    if (value && !tournament.players.includes(value)) {
+      tournament.players.push(value);
+    }
+  });
+}
+
+function renderChallongeMatches() {
+  if (!challongeMatchList) return;
+  challongeMatchList.innerHTML = "";
+  if (!tournament || !tournament.challongeUrl) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "Salva il link Challonge del torneo per abilitare l'importazione.";
+    challongeMatchList.appendChild(empty);
+    return;
+  }
+  const matches = availableChallongeMatches();
+  if (matches.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = tournament.challongeSyncedAt
+      ? "Nessun match aperto disponibile da Challonge."
+      : "Sincronizza Challonge per vedere i match aperti.";
+    challongeMatchList.appendChild(empty);
+    return;
+  }
+  matches.forEach((match) => {
+    const row = document.createElement("div");
+    row.className = "list-row";
+    const label = match.identifier ? `Match ${match.identifier}` : `Match ${match.id}`;
+    row.innerHTML = `
+      <strong>${match.player1Name} vs ${match.player2Name}</strong>
+      <div class="muted">${label} · Round ${match.round}</div>
+      <div class="row" style="margin-top:8px;">
+        <button class="load-challonge-match-btn" data-id="${match.id}" type="button">Carica su arena selezionata</button>
+      </div>
+    `;
+    challongeMatchList.appendChild(row);
+  });
+}
+
+function saveChallongeUrl() {
+  if (!tournament || !challongeUrlInput) return;
+  const nextUrl = String(challongeUrlInput.value || "").trim();
+  const currentUrl = String(tournament.challongeUrl || "").trim();
+  if (nextUrl === currentUrl) {
+    setChallongeStatus(nextUrl ? "Link Challonge già salvato." : "Link Challonge rimosso.");
+    return;
+  }
+  tournament.challongeUrl = nextUrl;
+  tournament.challongeState = "";
+  tournament.challongeSyncedAt = 0;
+  tournament.challongeOpenMatches = [];
+  challongeAutoSyncKey = "";
+  saveState(state);
+  render();
+  setChallongeStatus(nextUrl ? "Link Challonge salvato." : "Link Challonge rimosso.");
+}
+
+async function syncChallongeTournament(options = {}) {
+  if (!tournament || !tournament.challongeUrl) {
+    setChallongeStatus("Manca il link Challonge su questo torneo.", true);
+    return false;
+  }
+  try {
+    if (!options.silent) {
+      setChallongeStatus("Sincronizzazione Challonge in corso...");
+    }
+    const url = new URL(challongeTournamentEndpoint());
+    url.searchParams.set("url", tournament.challongeUrl);
+    const response = await fetch(url.toString());
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) {
+      setChallongeStatus(payload.error || `Sync Challonge fallita (${response.status})`, true);
+      return false;
+    }
+    mergeTournamentPlayers((payload.participants || []).map((participant) => participant.name));
+    tournament.challongeState = payload.state || "";
+    tournament.challongeSyncedAt = Date.now();
+    tournament.challongeOpenMatches = Array.isArray(payload.openMatches) ? payload.openMatches : [];
+    saveState(state);
+    render();
+    if (!options.silent) {
+      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti, torneo ${payload.state || "sconosciuto"}.`);
+    }
+    return true;
+  } catch (error) {
+    console.error("Challonge sync error:", error);
+    setChallongeStatus("Errore di rete durante la sincronizzazione Challonge.", true);
+    return false;
+  }
+}
+
+function loadChallongeMatchIntoArena(matchId = "") {
+  if (!tournament) return;
+  const arenaId = matchArenaSelect && matchArenaSelect.value;
+  if (!arenaId) {
+    setChallongeStatus("Seleziona prima un'arena.", true);
+    return;
+  }
+  const arena = tournament.arenas.find((item) => item.id === arenaId);
+  if (!arena) {
+    setChallongeStatus("Arena non trovata.", true);
+    return;
+  }
+  if (arena.status !== "free" || arena.match) {
+    setChallongeStatus(`${arena.name} ha già un match assegnato.`, true);
+    return;
+  }
+  const matches = availableChallongeMatches();
+  const selectedMatch = matchId
+    ? matches.find((match) => String(match.id) === String(matchId))
+    : matches[0];
+  if (!selectedMatch) {
+    setChallongeStatus("Nessun match Challonge disponibile da caricare.", true);
+    return;
+  }
+  arena.match = {
+    p1: selectedMatch.player1Name,
+    p2: selectedMatch.player2Name,
+    source: "challonge",
+    challongeMatchId: String(selectedMatch.id),
+    challongePlayer1Id: String(selectedMatch.player1Id),
+    challongePlayer2Id: String(selectedMatch.player2Id),
+    challongeIdentifier: selectedMatch.identifier || "",
+    challongeRound: selectedMatch.round || 0
+  };
+  arena.selectedWinner = "";
+  arena.winnerCandidate = "";
+  arena.coinTossResult = "";
+  saveState(state);
+  render();
+  setChallongeStatus(`Match caricato su ${arena.name}: ${selectedMatch.player1Name} vs ${selectedMatch.player2Name}.`);
+}
+
+async function reportChallongeResult(matchData, winnerName) {
+  if (!tournament || !tournament.challongeUrl) {
+    throw new Error("Manca il link Challonge del torneo.");
+  }
+  const winnerParticipantId = winnerName === matchData.p1
+    ? matchData.challongePlayer1Id
+    : matchData.challongePlayer2Id;
+  if (!winnerParticipantId) {
+    throw new Error("Impossibile determinare il vincitore Challonge.");
+  }
+  const scoresCsv = winnerName === matchData.p1 ? "1-0" : "0-1";
+  const response = await fetch(challongeReportEndpoint(matchData.challongeMatchId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tournamentUrl: tournament.challongeUrl,
+      winnerParticipantId,
+      scoresCsv
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || `Report Challonge fallito (${response.status})`);
+  }
+}
+
+function maybeAutoSyncChallonge() {
+  if (!tournament || !tournament.challongeUrl) return;
+  const nextKey = `${tournament.id}:${tournament.challongeUrl}`;
+  if (challongeAutoSyncKey === nextKey) return;
+  challongeAutoSyncKey = nextKey;
+  if (tournament.challongeSyncedAt) return;
+  window.setTimeout(() => {
+    syncChallongeTournament({ silent: false });
+  }, 0);
+}
+
 function render() {
   if (!tournament) {
     tournamentTitle.textContent = "Torneo non trovato";
@@ -94,6 +314,9 @@ function render() {
   tournamentTitle.textContent = tournament.name;
   arenaSelect.innerHTML = "";
   matchArenaSelect.innerHTML = "";
+  if (challongeUrlInput) {
+    challongeUrlInput.value = tournament.challongeUrl || "";
+  }
 
   tournament.arenas.forEach((arena) => {
     const option = document.createElement("option");
@@ -164,6 +387,18 @@ function render() {
 
   renderTournamentReferees();
   renderPlayers();
+  renderChallongeMatches();
+  if (challongeStatus && (!challongeStatus.textContent || challongeStatus.textContent === "Nessuna sincronizzazione eseguita.")) {
+    if (!tournament.challongeUrl) {
+      setChallongeStatus("Nessun link Challonge collegato.");
+    } else if (tournament.challongeSyncedAt) {
+      const openCount = Array.isArray(tournament.challongeOpenMatches) ? tournament.challongeOpenMatches.length : 0;
+      setChallongeStatus(`Ultima sync Challonge: ${openCount} match aperti.`);
+    } else {
+      setChallongeStatus("Link Challonge salvato. Sincronizza per importare il torneo.");
+    }
+  }
+  maybeAutoSyncChallonge();
 }
 
 function renderTournamentReferees() {
@@ -239,8 +474,7 @@ assignBtn.addEventListener("click", () => {
   if (!arenaId || !refereeId || !tournament) return;
   const arena = tournament.arenas.find((a) => a.id === arenaId);
   const ref = (state.refereesRegistry || []).find((item) => item.id === refereeId);
-  if (!ref) return;
-  if (!arena) return;
+  if (!ref || !arena) return;
   arena.refereeId = ref.id;
   arena.refereeName = ref.name;
   saveState(state);
@@ -281,7 +515,7 @@ setMatchBtn.addEventListener("click", () => {
   if (!p1 || !p2) return;
   matchMessage.textContent = "";
   matchMessage.classList.remove("error");
-  arena.match = { p1, p2 };
+  arena.match = { p1, p2, source: "manual" };
   arena.selectedWinner = "";
   arena.winnerCandidate = "";
   arena.coinTossResult = "";
@@ -290,6 +524,42 @@ setMatchBtn.addEventListener("click", () => {
   player1Input.value = "";
   player2Input.value = "";
 });
+
+if (saveChallongeUrlBtn) {
+  saveChallongeUrlBtn.addEventListener("click", saveChallongeUrl);
+}
+
+if (challongeUrlInput) {
+  challongeUrlInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveChallongeUrl();
+    }
+  });
+}
+
+if (syncChallongeBtn) {
+  syncChallongeBtn.addEventListener("click", () => {
+    syncChallongeTournament();
+  });
+}
+
+if (loadNextChallongeMatchBtn) {
+  loadNextChallongeMatchBtn.addEventListener("click", () => {
+    loadChallongeMatchIntoArena();
+  });
+}
+
+if (challongeMatchList) {
+  challongeMatchList.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!target.classList.contains("load-challonge-match-btn")) return;
+    const matchId = target.dataset.id;
+    if (!matchId) return;
+    loadChallongeMatchIntoArena(matchId);
+  });
+}
 
 importPlayersBtn.addEventListener("click", () => {
   if (!tournament) return;
@@ -322,7 +592,7 @@ clearPlayersBtn.addEventListener("click", () => {
   render();
 });
 
-arenaList.addEventListener("click", (event) => {
+arenaList.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (target.classList.contains("call-btn")) {
@@ -395,6 +665,19 @@ arenaList.addEventListener("click", (event) => {
   if (!tournament) return;
   const arena = tournament.arenas.find((a) => a.id === arenaId);
   if (!arena || !arena.winnerCandidate) return;
+  const matchData = arena.match;
+  const winnerName = arena.winnerCandidate;
+  if (matchData && matchData.source === "challonge" && matchData.challongeMatchId) {
+    try {
+      matchMessage.textContent = "Invio risultato a Challonge...";
+      matchMessage.classList.remove("error");
+      await reportChallongeResult(matchData, winnerName);
+    } catch (error) {
+      matchMessage.textContent = error.message || "Errore durante l'invio del risultato a Challonge.";
+      matchMessage.classList.add("error");
+      return;
+    }
+  }
   const refereeId = arena.refereeId;
   const refereeName = arena.refereeName;
   arena.winnerCandidate = "";
@@ -420,6 +703,10 @@ arenaList.addEventListener("click", (event) => {
   }
   saveState(state);
   render();
+  if (matchData && matchData.source === "challonge" && matchData.challongeMatchId) {
+    await syncChallongeTournament({ silent: true });
+    setChallongeStatus("Risultato inviato a Challonge e torneo aggiornato.");
+  }
 });
 
 if (tournamentRefereeList) {

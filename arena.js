@@ -90,8 +90,6 @@ confirmWinnerBtn.addEventListener("click", () => {
   currentArena.winnerCandidate = winner;
   currentArena.status = "standby";
   currentArena.selectedWinner = "";
-  currentArena.match = null;
-  currentArena.coinTossResult = "";
   saveArena();
 });
 
