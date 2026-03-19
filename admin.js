@@ -306,6 +306,11 @@ async function reportChallongeResult(matchData, winnerName) {
   }
 }
 
+function isChallongeReadOnlyError(error) {
+  const message = String(error && error.message ? error.message : error || "").toLowerCase();
+  return message.includes("only have read access") || message.includes("read access");
+}
+
 function maybeAutoSyncChallonge() {
   if (!tournament || !tournament.challongeUrl) return;
   const nextKey = `${tournament.id}:${tournament.challongeUrl}`;
@@ -366,6 +371,7 @@ function render() {
 
   arenaList.innerHTML = "";
   tournament.arenas.forEach((arena) => {
+    const canConfirmWinner = Boolean(arena.winnerCandidate) || (arena.status === "standby" && arena.match && arena.match.p1 && arena.match.p2);
     const expiredActions = arena.status === "expired"
       ? `<button class="restart-btn" data-id="${arena.id}">Riavvia chiamata</button>
          <button class="cancel-btn danger-btn" data-id="${arena.id}">Annulla match</button>`
@@ -384,12 +390,12 @@ function render() {
         <strong>${arena.name}</strong>
         <div class="muted">Arbitro: <span class="referee-name">${arena.refereeName || "—"}</span></div>
         <div class="muted">Sorteggio: <span class="winner-name">${arena.coinTossResult || "—"}</span></div>
-        <div class="muted">Vincitore: <span class="winner-name">${arena.winnerCandidate || "—"}</span></div>
+        <div class="muted">Vincitore: <span class="winner-name">${arena.winnerCandidate || (arena.status === "standby" ? "Da confermare" : "—")}</span></div>
         <div class="muted">Match: ${arena.match ? `<span class="match-players">${arena.match.p1} vs ${arena.match.p2}</span>` : "—"}</div>
       </div>
       <div class="badge ${arena.status}">${statusLabel(arena.status)}</div>
       <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" && arena.match ? "" : "disabled"}>Chiama arena</button>
-      <button class="confirm-btn" data-id="${arena.id}" ${arena.winnerCandidate ? "" : "disabled"}>Segna vincitore</button>
+      <button class="confirm-btn" data-id="${arena.id}" ${canConfirmWinner ? "" : "disabled"}>Segna vincitore</button>
       <a class="arena-link" href="arena.html?tid=${tournament.id}&id=${arena.id}" target="_blank" rel="noopener">Apri pagina</a>
       ${clearRefAction}
       ${expiredActions}
@@ -677,22 +683,30 @@ arenaList.addEventListener("click", async (event) => {
   const arenaId = target.dataset.id;
   if (!tournament) return;
   const arena = tournament.arenas.find((a) => a.id === arenaId);
-  if (!arena || !arena.winnerCandidate) return;
+  if (!arena) return;
   const matchData = arena.match;
-  const winnerName = arena.winnerCandidate;
+  const winnerName = resolveArenaWinnerChoice(arena);
+  if (!winnerName) return;
+  let challongeWriteMode = "";
   if (matchData && matchData.source === "challonge" && matchData.challongeMatchId) {
     try {
       matchMessage.textContent = "Invio risultato a Challonge...";
       matchMessage.classList.remove("error");
       await reportChallongeResult(matchData, winnerName);
+      challongeWriteMode = "written";
     } catch (error) {
-      matchMessage.textContent = error.message || "Errore durante l'invio del risultato a Challonge.";
-      matchMessage.classList.add("error");
-      return;
+      if (isChallongeReadOnlyError(error)) {
+        challongeWriteMode = "manual";
+      } else {
+        matchMessage.textContent = error.message || "Errore durante l'invio del risultato a Challonge.";
+        matchMessage.classList.add("error");
+        return;
+      }
     }
   }
   const refereeId = arena.refereeId;
   const refereeName = arena.refereeName;
+  arena.lastWinner = winnerName;
   arena.winnerCandidate = "";
   arena.status = "free";
   arena.calledAt = null;
@@ -717,8 +731,14 @@ arenaList.addEventListener("click", async (event) => {
   saveState(state);
   render();
   if (matchData && matchData.source === "challonge" && matchData.challongeMatchId) {
-    await syncChallongeTournament({ silent: true });
-    setChallongeStatus("Risultato inviato a Challonge e torneo aggiornato.");
+    if (challongeWriteMode === "written") {
+      await syncChallongeTournament({ silent: true });
+      setChallongeStatus("Risultato inviato a Challonge e torneo aggiornato.");
+    } else if (challongeWriteMode === "manual") {
+      matchMessage.textContent = "Torneo Challonge in sola lettura: risultato segnato nell'app.";
+      matchMessage.classList.remove("error");
+      setChallongeStatus("Risultato segnato nell'app. Aggiorna Challonge manualmente per questo torneo.");
+    }
   }
 });
 
@@ -785,4 +805,18 @@ function renderPlayers() {
     opt.value = name;
     playersList.appendChild(opt);
   });
+}
+
+function resolveArenaWinnerChoice(arena) {
+  if (!arena) return "";
+  if (arena.winnerCandidate) return arena.winnerCandidate;
+  if (!arena.match || !arena.match.p1 || !arena.match.p2) return "";
+  const p1 = arena.match.p1;
+  const p2 = arena.match.p2;
+  const input = window.prompt(`Inserisci 1 per "${p1}" oppure 2 per "${p2}"`, "1");
+  const value = String(input || "").trim().toLowerCase();
+  if (!value) return "";
+  if (value === "1" || value === p1.toLowerCase()) return p1;
+  if (value === "2" || value === p2.toLowerCase()) return p2;
+  return "";
 }
