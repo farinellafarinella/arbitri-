@@ -234,6 +234,45 @@ function inferRoundRobinPlayerMap(participants, matches) {
   return new Map();
 }
 
+function inferSwissFirstRoundPlayerMap(participants, matches) {
+  const seededParticipants = (Array.isArray(participants) ? participants : [])
+    .filter((participant) => participant && participant.id && Number.isFinite(Number(participant.seed)))
+    .slice()
+    .sort((left, right) => Number(left.seed) - Number(right.seed));
+  const safeMatches = (Array.isArray(matches) ? matches : [])
+    .filter((match) => match && match.player1_id && match.player2_id);
+  if (seededParticipants.length < 2 || safeMatches.length === 0) return new Map();
+  if (safeMatches.some((match) => Number(match.round) !== 1)) return new Map();
+
+  const matchPlayerIds = Array.from(new Set(
+    safeMatches.flatMap((match) => [String(match.player1_id), String(match.player2_id)])
+  )).sort();
+  const participantCount = seededParticipants.length;
+  const expectedMatchCount = Math.floor(participantCount / 2);
+  if (safeMatches.length !== expectedMatchCount) return new Map();
+  if (matchPlayerIds.length !== participantCount && matchPlayerIds.length !== participantCount - 1) return new Map();
+
+  const half = safeMatches.length;
+  const expectedPairs = [];
+  for (let index = 0; index < half; index += 1) {
+    expectedPairs.push(normalizePairKey(matchPlayerIds[index], matchPlayerIds[index + half]));
+  }
+  const actualPairs = safeMatches
+    .map((match) => normalizePairKey(match.player1_id, match.player2_id))
+    .sort();
+  if (JSON.stringify(expectedPairs.sort()) !== JSON.stringify(actualPairs)) {
+    return new Map();
+  }
+
+  const inferred = new Map();
+  matchPlayerIds.forEach((matchPlayerId, index) => {
+    const participant = seededParticipants[index];
+    if (!participant) return;
+    inferred.set(String(matchPlayerId), participant);
+  });
+  return inferred;
+}
+
 async function challongeRequest(pathname, options = {}) {
   if (!CHALLONGE_API_KEY) {
     const error = new Error("Missing CHALLONGE_API_KEY env var");
@@ -279,6 +318,7 @@ function normalizeChallongeTournamentPayload(bundle) {
   const matches = Array.isArray(bundle && bundle.matches) ? bundle.matches : [];
   const participantById = new Map(participants.map((participant) => [String(participant.id), participant]));
   const inferredPlayerMap = inferRoundRobinPlayerMap(participants, matches);
+  const inferredSwissPlayerMap = inferSwissFirstRoundPlayerMap(participants, matches);
   const participantName = (participant, fallback = "") => pickDisplayText(
     participant && participant.name,
     participant && participant.display_name,
@@ -294,8 +334,12 @@ function normalizeChallongeTournamentPayload(bundle) {
   const openMatches = matches
     .filter((match) => match && match.state === "open" && match.player1_id && match.player2_id)
     .map((match) => {
-      const player1 = participantById.get(String(match.player1_id)) || inferredPlayerMap.get(String(match.player1_id));
-      const player2 = participantById.get(String(match.player2_id)) || inferredPlayerMap.get(String(match.player2_id));
+      const player1 = participantById.get(String(match.player1_id))
+        || inferredPlayerMap.get(String(match.player1_id))
+        || inferredSwissPlayerMap.get(String(match.player1_id));
+      const player2 = participantById.get(String(match.player2_id))
+        || inferredPlayerMap.get(String(match.player2_id))
+        || inferredSwissPlayerMap.get(String(match.player2_id));
       const player1Name = participantName(player1, match.player1_id ? `Partecipante ${match.player1_id}` : "");
       const player2Name = participantName(player2, match.player2_id ? `Partecipante ${match.player2_id}` : "");
       return {
