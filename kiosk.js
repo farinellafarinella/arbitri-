@@ -10,6 +10,30 @@ let tournament = findTournament(state, tournamentId);
 let previousArenas = new Map();
 let bannerTimer = null;
 
+function challongeParticipantNameMap() {
+  const map = new Map();
+  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
+  tournament.challongeParticipants.forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name) return;
+    map.set(id, name);
+  });
+  return map;
+}
+
+function resolveArenaMatchNames(arena) {
+  const match = arena && arena.match;
+  if (!match) return { player1Name: "", player2Name: "" };
+  const participantMap = challongeParticipantNameMap();
+  const player1Id = String(match.challongePlayer1Id || "").trim();
+  const player2Id = String(match.challongePlayer2Id || "").trim();
+  return {
+    player1Name: participantMap.get(player1Id) || String(match.p1 || "").trim(),
+    player2Name: participantMap.get(player2Id) || String(match.p2 || "").trim()
+  };
+}
+
 function render() {
   if (!tournament) {
     kioskTitle.textContent = "Torneo non trovato";
@@ -21,12 +45,13 @@ function render() {
   kioskGrid.innerHTML = "";
 
   tournament.arenas.forEach((arena) => {
+    const matchNames = resolveArenaMatchNames(arena);
     const prev = previousArenas.get(arena.id);
     if (prev) {
       if (prev.status !== "called" && arena.status === "called") {
         showBanner(
           `Arena chiamata: ${arena.name}`,
-          arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "Match non disponibile"
+          arena.match ? `${matchNames.player1Name} vs ${matchNames.player2Name}` : "Match non disponibile"
         );
       }
       if (prev.refereeName && arena.refereeName && prev.refereeName !== arena.refereeName) {
@@ -41,8 +66,8 @@ function render() {
     const matchHtml = arena.match
       ? `
         <div class="kiosk-match">
-          <div class="kiosk-player">${arena.match.p1}</div>
-          <div class="kiosk-player">${arena.match.p2}</div>
+          <div class="kiosk-player">${matchNames.player1Name}</div>
+          <div class="kiosk-player">${matchNames.player2Name}</div>
         </div>
       `
       : `<div class="muted">Match: —</div>`;

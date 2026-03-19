@@ -87,6 +87,18 @@ function tournamentRegistryReferees() {
     .filter(Boolean);
 }
 
+function tournamentChallongeParticipantMap() {
+  const map = new Map();
+  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
+  tournament.challongeParticipants.forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name || challongePlaceholderName(name, id)) return;
+    map.set(id, name);
+  });
+  return map;
+}
+
 function getRegisteredPushSubscriptions(referee) {
   if (!referee) return [];
   return Array.isArray(referee.webPushSubscriptions) ? referee.webPushSubscriptions.filter(Boolean) : [];
@@ -243,8 +255,15 @@ function renderMatchArenaBoard() {
   matchArenaBoard.innerHTML = "";
   if (!tournament) return;
   const selectedArenaId = matchArenaSelect ? String(matchArenaSelect.value || "") : "";
+  const participantNameMap = tournamentChallongeParticipantMap();
   (tournament.arenas || []).forEach((arena) => {
     const isReady = arena.status === "free" && !arena.match;
+    const matchNames = arena.match && arena.match.source === "challonge"
+      ? resolveChallongeMatchNames(arena.match, participantNameMap)
+      : {
+          player1Name: arena.match ? String(arena.match.p1 || "").trim() : "",
+          player2Name: arena.match ? String(arena.match.p2 || "").trim() : ""
+        };
     const boardBadge = isReady
       ? "Libera"
       : arena.status === "free" && arena.match
@@ -253,7 +272,7 @@ function renderMatchArenaBoard() {
     const note = isReady
       ? "Pronta per caricare un match"
       : arena.match
-        ? `${arena.match.p1} vs ${arena.match.p2}`
+        ? `${matchNames.player1Name} vs ${matchNames.player2Name}`
         : `Stato: ${statusLabel(arena.status)}`;
     const button = document.createElement("button");
     button.type = "button";
@@ -344,6 +363,20 @@ function normalizeChallongeMatchesWithParticipants(matches = [], participantName
   }).filter((match) => match.id && match.player1Name && match.player2Name);
 }
 
+function resolveChallongeMatchNames(match, participantNameMap = tournamentChallongeParticipantMap()) {
+  if (!match) {
+    return { player1Name: "", player2Name: "" };
+  }
+  const player1Id = String(match.player1Id || match.challongePlayer1Id || "").trim();
+  const player2Id = String(match.player2Id || match.challongePlayer2Id || "").trim();
+  const currentPlayer1 = String(match.player1Name || match.p1 || "").trim();
+  const currentPlayer2 = String(match.player2Name || match.p2 || "").trim();
+  return {
+    player1Name: participantNameMap.get(player1Id) || currentPlayer1 || (player1Id ? `Partecipante ${player1Id}` : ""),
+    player2Name: participantNameMap.get(player2Id) || currentPlayer2 || (player2Id ? `Partecipante ${player2Id}` : "")
+  };
+}
+
 function refreshAssignedChallongeArenaNames(participantNameMap = new Map(), normalizedMatches = []) {
   if (!tournament) return;
   const matchesById = new Map((Array.isArray(normalizedMatches) ? normalizedMatches : []).map((match) => [String(match.id), match]));
@@ -385,12 +418,14 @@ function renderChallongeMatches() {
     challongeMatchList.appendChild(empty);
     return;
   }
+  const participantNameMap = tournamentChallongeParticipantMap();
   matches.forEach((match) => {
+    const names = resolveChallongeMatchNames(match, participantNameMap);
     const row = document.createElement("div");
     row.className = "list-row";
     const label = match.identifier ? `Match ${match.identifier}` : `Match ${match.id}`;
     row.innerHTML = `
-      <strong>${match.player1Name} vs ${match.player2Name}</strong>
+      <strong>${names.player1Name} vs ${names.player2Name}</strong>
       <div class="muted">${label} · Round ${match.round}</div>
       <div class="row" style="margin-top:8px;">
         <button class="load-challonge-match-btn" data-id="${match.id}" type="button">Carica su arena selezionata</button>
@@ -411,6 +446,7 @@ function saveChallongeUrl() {
   tournament.challongeUrl = nextUrl;
   tournament.challongeState = "";
   tournament.challongeSyncedAt = 0;
+  tournament.challongeParticipants = [];
   tournament.challongeOpenMatches = [];
   challongeAutoSyncKey = "";
   saveState(state);
@@ -437,6 +473,14 @@ async function syncChallongeTournament(options = {}) {
     }
     const participantNameMap = buildChallongeParticipantNameMap(payload.participants || []);
     const normalizedOpenMatches = normalizeChallongeMatchesWithParticipants(payload.openMatches || [], participantNameMap);
+    tournament.challongeParticipants = (payload.participants || []).filter((participant) => {
+      const id = String(participant && participant.id || "").trim();
+      const name = String(participant && participant.name || "").trim();
+      return Boolean(id && name);
+    }).map((participant) => ({
+      id: String(participant.id).trim(),
+      name: String(participant.name).trim()
+    }));
     syncTournamentPlayers((payload.participants || []).map((participant) => participant.name));
     tournament.challongeState = payload.state || "";
     tournament.challongeSyncedAt = Date.now();
@@ -483,9 +527,10 @@ function loadChallongeMatchIntoArena(matchId = "") {
     setChallongeStatus("Nessun match Challonge disponibile da caricare.", true);
     return;
   }
+  const names = resolveChallongeMatchNames(selectedMatch);
   arena.match = {
-    p1: selectedMatch.player1Name,
-    p2: selectedMatch.player2Name,
+    p1: names.player1Name,
+    p2: names.player2Name,
     source: "challonge",
     challongeMatchId: String(selectedMatch.id),
     challongePlayer1Id: String(selectedMatch.player1Id),
@@ -498,7 +543,7 @@ function loadChallongeMatchIntoArena(matchId = "") {
   arena.coinTossResult = "";
   saveState(state);
   render();
-  setChallongeStatus(`Match caricato su ${arena.name}: ${selectedMatch.player1Name} vs ${selectedMatch.player2Name}.`);
+  setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.`);
 }
 
 async function reportChallongeResult(matchData, winnerName) {
@@ -601,8 +646,15 @@ function render() {
   }
 
   arenaList.innerHTML = "";
+  const participantNameMap = tournamentChallongeParticipantMap();
   tournament.arenas.forEach((arena) => {
     const canConfirmWinner = Boolean(arena.winnerCandidate) || (arena.status === "standby" && arena.match && arena.match.p1 && arena.match.p2);
+    const matchNames = arena.match && arena.match.source === "challonge"
+      ? resolveChallongeMatchNames(arena.match, participantNameMap)
+      : {
+          player1Name: arena.match ? String(arena.match.p1 || "").trim() : "",
+          player2Name: arena.match ? String(arena.match.p2 || "").trim() : ""
+        };
     const expiredActions = arena.status === "expired"
       ? `<button class="restart-btn" data-id="${arena.id}">Riavvia chiamata</button>
          <button class="cancel-btn danger-btn" data-id="${arena.id}">Annulla match</button>`
@@ -622,7 +674,7 @@ function render() {
         <div class="muted">Arbitro: <span class="referee-name">${arena.refereeName || "—"}</span></div>
         <div class="muted">Sorteggio: <span class="winner-name">${arena.coinTossResult || "—"}</span></div>
         <div class="muted">Vincitore: <span class="winner-name">${arena.winnerCandidate || (arena.status === "standby" ? "Da confermare" : "—")}</span></div>
-        <div class="muted">Match: ${arena.match ? `<span class="match-players">${arena.match.p1} vs ${arena.match.p2}</span>` : "—"}</div>
+        <div class="muted">Match: ${arena.match ? `<span class="match-players">${matchNames.player1Name} vs ${matchNames.player2Name}</span>` : "—"}</div>
       </div>
       <div class="badge ${arena.status}">${statusLabel(arena.status)}</div>
       <button class="call-btn" data-id="${arena.id}" ${arena.status === "free" && arena.match ? "" : "disabled"}>Chiama arena</button>

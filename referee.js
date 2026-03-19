@@ -112,6 +112,30 @@ function updateAssignedArenaNames(stateValue, refereeId, nextName, previousName)
   });
 }
 
+function challongeParticipantNameMap(tournament) {
+  const map = new Map();
+  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
+  tournament.challongeParticipants.forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name) return;
+    map.set(id, name);
+  });
+  return map;
+}
+
+function resolveArenaMatchNames(tournament, arena) {
+  const match = arena && arena.match;
+  if (!match) return { player1Name: "", player2Name: "" };
+  const participantMap = challongeParticipantNameMap(tournament);
+  const player1Id = String(match.challongePlayer1Id || "").trim();
+  const player2Id = String(match.challongePlayer2Id || "").trim();
+  return {
+    player1Name: participantMap.get(player1Id) || String(match.p1 || "").trim(),
+    player2Name: participantMap.get(player2Id) || String(match.p2 || "").trim()
+  };
+}
+
 async function saveRefereeName() {
   if (!currentReferee) return;
   const nextName = String(refereeNameInput && refereeNameInput.value || "").trim();
@@ -166,6 +190,7 @@ function renderRefereeHome() {
   }
 
   items.forEach(({ tournament, arena }) => {
+    const matchNames = resolveArenaMatchNames(tournament, arena);
     const row = document.createElement("div");
     row.className = "list-row";
     const actionHref = `arena.html?tid=${tournament.id}&id=${arena.id}`;
@@ -174,7 +199,7 @@ function renderRefereeHome() {
       <strong>${tournament.name}</strong>
       <div class="muted">Arena: ${arena.name}</div>
       <div class="muted">Stato: ${statusLabel(arena.status)}</div>
-      <div class="muted">Match: ${arena.match ? `${arena.match.p1} vs ${arena.match.p2}` : "—"}</div>
+      <div class="muted">Match: ${arena.match ? `${matchNames.player1Name} vs ${matchNames.player2Name}` : "—"}</div>
       <div class="row" style="margin-top:8px;">
         <a class="arena-link" href="${actionHref}">${actionLabel}</a>
       </div>

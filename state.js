@@ -171,6 +171,7 @@ function createTournament(name, challongeUrl = "") {
     challongeUrl,
     challongeState: "",
     challongeSyncedAt: 0,
+    challongeParticipants: [],
     challongeOpenMatches: [],
     players: [],
     arenas: [],
@@ -246,6 +247,7 @@ function normalizeTournament(tournament) {
     challongeUrl: tournament.challongeUrl || "",
     challongeState: tournament.challongeState || "",
     challongeSyncedAt: Number.isFinite(tournament.challongeSyncedAt) ? tournament.challongeSyncedAt : 0,
+    challongeParticipants: normalizeChallongeParticipants(tournament.challongeParticipants),
     challongeOpenMatches: normalizeChallongeOpenMatches(tournament.challongeOpenMatches),
     players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
@@ -275,6 +277,13 @@ function normalizeChallongeOpenMatches(list) {
     player1Name: normalizePersonName(match.player1Name, match.player1Id ? `Partecipante ${match.player1Id}` : ""),
     player2Name: normalizePersonName(match.player2Name, match.player2Id ? `Partecipante ${match.player2Id}` : "")
   })).filter((match) => match.id && match.player1Name && match.player2Name);
+}
+
+function normalizeChallongeParticipants(list) {
+  return (Array.isArray(list) ? list : []).map((participant) => ({
+    id: String(participant && participant.id || "").trim(),
+    name: normalizePersonName(participant && participant.name, "")
+  })).filter((participant) => participant.id && participant.name);
 }
 
 function normalizeRefereeRegistry(list) {

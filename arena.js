@@ -20,6 +20,30 @@ let tournament = null;
 let currentUser = null;
 let currentRole = "";
 
+function challongeParticipantNameMap() {
+  const map = new Map();
+  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
+  tournament.challongeParticipants.forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name) return;
+    map.set(id, name);
+  });
+  return map;
+}
+
+function resolvedCurrentMatchNames() {
+  const match = currentArena && currentArena.match;
+  if (!match) return { player1Name: "", player2Name: "" };
+  const participantMap = challongeParticipantNameMap();
+  const player1Id = String(match.challongePlayer1Id || "").trim();
+  const player2Id = String(match.challongePlayer2Id || "").trim();
+  return {
+    player1Name: participantMap.get(player1Id) || String(match.p1 || "").trim(),
+    player2Name: participantMap.get(player2Id) || String(match.p2 || "").trim()
+  };
+}
+
 function updateArenaUI() {
   if (!currentArena) {
     arenaTitle.textContent = "Arena non trovata";
@@ -37,11 +61,12 @@ function updateArenaUI() {
   const enabled = Boolean(currentArena.refereeName);
   const canStart = currentArena.status === "called" && timeLeftMs() > 0;
   startMatchBtn.disabled = !enabled || !canStart;
-  const hasMatch = currentArena.match && currentArena.match.p1 && currentArena.match.p2;
+  const matchNames = resolvedCurrentMatchNames();
+  const hasMatch = Boolean(matchNames.player1Name && matchNames.player2Name);
   startMatchBtn.disabled = !enabled || !canStart || !hasMatch;
   confirmWinnerBtn.disabled = !enabled || currentArena.status !== "occupied" || !hasMatch || !currentArena.selectedWinner;
   renderWinnerOptions();
-  matchDisplay.textContent = hasMatch ? `${currentArena.match.p1} vs ${currentArena.match.p2}` : "—";
+  matchDisplay.textContent = hasMatch ? `${matchNames.player1Name} vs ${matchNames.player2Name}` : "—";
   if (coinResultDisplay) {
     coinResultDisplay.textContent = currentArena.coinTossResult || "—";
   }
@@ -194,7 +219,8 @@ function statusLabel(status) {
 function renderWinnerOptions() {
   winnerOptions.innerHTML = "";
   if (!currentArena || !currentArena.match) return;
-  const options = [currentArena.match.p1, currentArena.match.p2].filter(Boolean);
+  const matchNames = resolvedCurrentMatchNames();
+  const options = [matchNames.player1Name, matchNames.player2Name].filter(Boolean);
   options.forEach((name) => {
     const btn = document.createElement("button");
     btn.type = "button";
