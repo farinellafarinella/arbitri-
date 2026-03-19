@@ -39,6 +39,7 @@ const tournamentId = params.get("id");
 let tournament = findTournament(state, tournamentId);
 let currentUser = null;
 let challongeAutoSyncKey = "";
+const selectedChallongeArenaByMatch = {};
 
 function notifyEndpoint() {
   return String(window.NOTIFY_ENDPOINT || "/notify");
@@ -85,6 +86,12 @@ function tournamentRegistryReferees() {
   return ids
     .map((id) => registry.find((ref) => ref.id === id))
     .filter(Boolean);
+}
+
+function compactArenaLabel(arena) {
+  const name = String(arena && arena.name || "").trim();
+  const numericMatch = name.match(/(\d+)(?!.*\d)/);
+  return numericMatch ? numericMatch[1] : name || "Arena";
 }
 
 function canLoadMatchIntoArena(arena) {
@@ -278,15 +285,11 @@ function renderRefereeLineup() {
     reserves.forEach((ref) => {
       const row = document.createElement("div");
       row.className = "list-row roster-item";
-      const levelInfo = getRefereeLevelInfo(ref.exp || 0);
       const arenaOptions = (tournament.arenas || []).map((arena) => {
-        const assignedText = arena.refereeName ? `Arbitro: ${arena.refereeName}` : "Senza arbitro";
-        return `<option value="${arena.id}">${arena.name} · ${statusLabel(arena.status)} · ${assignedText}</option>`;
+        return `<option value="${arena.id}">${compactArenaLabel(arena)}</option>`;
       }).join("");
       row.innerHTML = `
         <strong>${ref.name}</strong>
-        <div class="muted">Riserva</div>
-        <div class="muted">Lv ${levelInfo.level}</div>
         <div class="reserve-assign-row">
           <select class="reserve-arena-select" data-ref-id="${ref.id}">
             ${arenaOptions || '<option value="">Nessuna arena disponibile</option>'}
@@ -474,12 +477,15 @@ function renderChallongeMatches() {
   const arenaTargets = (tournament.arenas || []).map((arena) => ({
     id: arena.id,
     name: arena.name,
+    compactName: compactArenaLabel(arena),
     status: arena.status,
     refereeName: arena.refereeName || "",
     ready: canLoadMatchIntoArena(arena)
   }));
   matches.forEach((match) => {
     const names = resolveChallongeMatchNames(match, participantNameMap);
+    const selectedArenaId = String(selectedChallongeArenaByMatch[String(match.id)] || "").trim();
+    const selectedArena = arenaTargets.find((arena) => arena.id === selectedArenaId) || null;
     const row = document.createElement("div");
     row.className = "list-row";
     const label = match.identifier ? `Match ${match.identifier}` : `Match ${match.id}`;
@@ -488,25 +494,29 @@ function renderChallongeMatches() {
       : `<div class="match-arena-picker">${arenaTargets.map((arena) => `
           <button
             type="button"
-            class="match-arena-btn"
+            class="match-arena-btn${selectedArenaId === arena.id ? " is-selected" : ""}"
             data-match-id="${match.id}"
             data-arena-id="${arena.id}"
             ${arena.ready ? "" : "disabled"}
           >
             <span class="light ${arena.status}" aria-hidden="true"></span>
             <span>
-              <strong>${arena.name}</strong>
-              <span class="quick-arena-note">${arena.refereeName || "Senza arbitro"} · ${arena.ready ? "Libera" : statusLabel(arena.status)}</span>
+              <strong>${arena.compactName}</strong>
+              <span class="quick-arena-note">${arena.ready ? "Libera" : statusLabel(arena.status)}</span>
             </span>
           </button>
         `).join("")}</div>`;
+    const selectedArenaText = selectedArena
+      ? `Arena selezionata: ${selectedArena.compactName}`
+      : "Seleziona l'arena qui sotto";
     row.innerHTML = `
       <strong>${names.player1Name} vs ${names.player2Name}</strong>
       <div class="muted">${label} · Round ${match.round}</div>
       <div class="match-arena-actions">
         <div class="row" style="margin-top:0;">
-          <button class="load-challonge-match-btn" data-id="${match.id}" type="button">Carica su arena selezionata</button>
+          <button class="load-challonge-match-btn" data-id="${match.id}" type="button" ${selectedArena && selectedArena.ready ? "" : "disabled"}>Assegna match a questa arena</button>
         </div>
+        <div class="muted">${selectedArenaText}</div>
         ${arenaButtons}
       </div>
     `;
@@ -579,7 +589,8 @@ async function syncChallongeTournament(options = {}) {
 
 function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   if (!tournament) return;
-  const arenaId = String(forcedArenaId || (matchArenaSelect && matchArenaSelect.value) || "").trim();
+  const rememberedArenaId = matchId ? String(selectedChallongeArenaByMatch[String(matchId)] || "").trim() : "";
+  const arenaId = String(forcedArenaId || rememberedArenaId || (matchArenaSelect && matchArenaSelect.value) || "").trim();
   if (!arenaId) {
     setChallongeStatus("Seleziona prima un'arena.", true);
     return;
@@ -618,6 +629,9 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   arena.selectedWinner = "";
   arena.winnerCandidate = "";
   arena.coinTossResult = "";
+  if (matchId) {
+    delete selectedChallongeArenaByMatch[String(matchId)];
+  }
   saveState(state);
   render();
   setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.`);
@@ -944,7 +958,12 @@ if (challongeMatchList) {
       const matchId = directArenaButton.dataset.matchId;
       const arenaId = directArenaButton.dataset.arenaId;
       if (!matchId || !arenaId) return;
-      loadChallongeMatchIntoArena(matchId, arenaId);
+      selectedChallongeArenaByMatch[String(matchId)] = arenaId;
+      if (matchArenaSelect) {
+        matchArenaSelect.value = arenaId;
+      }
+      renderChallongeMatches();
+      renderMatchArenaBoard();
       return;
     }
     if (!target.classList.contains("load-challonge-match-btn")) return;

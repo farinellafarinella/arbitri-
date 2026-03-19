@@ -618,6 +618,11 @@ button:disabled {
   border-width: 2px;
 }
 
+.match-arena-btn.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.35);
+}
+
 .match-arena-btn:disabled {
   background: #1b1d26;
   color: var(--muted);
