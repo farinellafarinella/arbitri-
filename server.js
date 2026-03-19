@@ -271,7 +271,10 @@ function inferGroupStagePlayerMap(participants, matches) {
   participantGroups.forEach((groupParticipants, groupKey) => {
     const groupMatches = matchGroups.get(groupKey) || [];
     if (groupParticipants.length < 2 || groupMatches.length === 0) return;
-    const groupMap = inferRoundRobinPlayerMap(groupParticipants, groupMatches);
+    const firstRoundGroupMap = inferSwissFirstRoundPlayerMap(groupParticipants, groupMatches);
+    const groupMap = firstRoundGroupMap.size > 0
+      ? firstRoundGroupMap
+      : inferRoundRobinPlayerMap(groupParticipants, groupMatches);
     groupMap.forEach((participant, matchPlayerId) => {
       inferred.set(matchPlayerId, participant);
     });
