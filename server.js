@@ -117,6 +117,13 @@ function pickDisplayText(...values) {
   return "";
 }
 
+function unwrapChallongeList(payload, key) {
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .map((entry) => entry && entry[key] ? entry[key] : null)
+    .filter(Boolean);
+}
+
 async function challongeRequest(pathname, options = {}) {
   if (!CHALLONGE_API_KEY) {
     const error = new Error("Missing CHALLONGE_API_KEY env var");
@@ -142,16 +149,32 @@ async function challongeRequest(pathname, options = {}) {
   return payload;
 }
 
-function normalizeChallongeTournamentPayload(payload) {
-  const tournament = payload && payload.tournament ? payload.tournament : {};
-  const participantRecords = Array.isArray(tournament.participants) ? tournament.participants : [];
-  const matchRecords = Array.isArray(tournament.matches) ? tournament.matches : [];
-  const participants = participantRecords.map((entry) => entry && entry.participant ? entry.participant : null).filter(Boolean);
+async function fetchChallongeTournamentBundle(tournamentRef) {
+  const encodedRef = encodeURIComponent(tournamentRef);
+  const [tournamentPayload, participantsPayload, matchesPayload] = await Promise.all([
+    challongeRequest(`/tournaments/${encodedRef}`),
+    challongeRequest(`/tournaments/${encodedRef}/participants`),
+    challongeRequest(`/tournaments/${encodedRef}/matches`, {
+      query: { state: "open" }
+    })
+  ]);
+  return {
+    tournament: tournamentPayload && tournamentPayload.tournament ? tournamentPayload.tournament : {},
+    participants: unwrapChallongeList(participantsPayload, "participant"),
+    matches: unwrapChallongeList(matchesPayload, "match")
+  };
+}
+
+function normalizeChallongeTournamentPayload(bundle) {
+  const tournament = bundle && bundle.tournament ? bundle.tournament : {};
+  const participants = Array.isArray(bundle && bundle.participants) ? bundle.participants : [];
+  const matches = Array.isArray(bundle && bundle.matches) ? bundle.matches : [];
   const participantById = new Map(participants.map((participant) => [String(participant.id), participant]));
   const participantName = (participant, fallback = "") => pickDisplayText(
     participant && participant.name,
     participant && participant.display_name,
     participant && participant.display_name_with_invitation_email_address,
+    participant && participant.invite_email,
     participant && participant.username,
     participant && participant.challonge_username,
     participant && participant.misc,
@@ -159,10 +182,8 @@ function normalizeChallongeTournamentPayload(payload) {
     participant && participant.email,
     fallback
   );
-  const openMatches = matchRecords
-    .map((entry) => entry && entry.match ? entry.match : null)
-    .filter(Boolean)
-    .filter((match) => match.state === "open" && match.player1_id && match.player2_id)
+  const openMatches = matches
+    .filter((match) => match && match.state === "open" && match.player1_id && match.player2_id)
     .map((match) => {
       const player1 = participantById.get(String(match.player1_id));
       const player2 = participantById.get(String(match.player2_id));
@@ -209,13 +230,8 @@ app.get("/challonge/tournament", async (req, res) => {
     });
   }
   try {
-    const payload = await challongeRequest(`/tournaments/${encodeURIComponent(tournamentRef)}`, {
-      query: {
-        include_participants: "1",
-        include_matches: "1"
-      }
-    });
-    const normalized = normalizeChallongeTournamentPayload(payload);
+    const bundle = await fetchChallongeTournamentBundle(tournamentRef);
+    const normalized = normalizeChallongeTournamentPayload(bundle);
     return res.json({ ok: true, tournamentRef, ...normalized });
   } catch (error) {
     return res.status(error.statusCode || 500).json({

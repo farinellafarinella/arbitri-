@@ -11,6 +11,7 @@ let stateDocRef = null;
 let realtimeStatus = { online: false, connected: false };
 let pendingWrite = null;
 let pendingState = null;
+let pendingStatePolicy = { allowEmptyTournaments: false };
 let lastSerialized = "";
 let hasInitialRemoteSnapshot = false;
 let syncedStateCache = { tournaments: [], refereesRegistry: [], updatedAt: 0 };
@@ -133,15 +134,18 @@ function saveState(state) {
       stateCache = sanitizeState(sanitized);
       persistRemoteCache(stateCache);
       pendingState = null;
+      pendingStatePolicy = { allowEmptyTournaments: false };
       return;
     }
+    const allowEmptyTournaments = hasInitialRemoteSnapshot;
     sanitized.updatedAt = Date.now();
     const mergedState = mergePendingState(baseState, sanitized, {
-      allowEmptyTournaments: hasInitialRemoteSnapshot
+      allowEmptyTournaments
     });
     stateCache = mergedState;
     persistRemoteCache(mergedState);
     pendingState = mergedState;
+    pendingStatePolicy = { allowEmptyTournaments };
     if (hasInitialRemoteSnapshot) scheduleWrite(mergedState);
     return;
   }
@@ -445,6 +449,7 @@ function initFirestoreSync() {
         syncedStateCache = sanitizeState(stateCache);
         persistRemoteCache(stateCache);
       } else {
+        pendingStatePolicy = { allowEmptyTournaments: true };
         scheduleWrite(stateCache);
       }
       if (pendingState) scheduleWrite(pendingState);
@@ -459,15 +464,14 @@ function initFirestoreSync() {
     persistRemoteCache(stateCache);
     lastSerialized = JSON.stringify(stateCache);
     if (pendingState && (pendingState.updatedAt || 0) > (remoteState.updatedAt || 0)) {
-      const mergedPending = mergePendingState(remoteState, pendingState, {
-        allowEmptyTournaments: false
-      });
+      const mergedPending = mergePendingState(remoteState, pendingState, pendingStatePolicy);
       pendingState = mergedPending;
       stateCache = mergedPending;
       persistRemoteCache(stateCache);
       scheduleWrite(mergedPending);
     } else {
       pendingState = null;
+      pendingStatePolicy = { allowEmptyTournaments: false };
     }
     emitRealtimeStatus({ online: true, connected: true });
     notifySubscribers();
@@ -512,13 +516,16 @@ function scheduleWrite(nextState) {
   const serialized = JSON.stringify(nextState);
   if (serialized === lastSerialized) {
     pendingState = null;
+    pendingStatePolicy = { allowEmptyTournaments: false };
     return;
   }
   pendingState = nextState;
   if (pendingWrite) return;
   pendingWrite = setTimeout(() => {
     const payload = pendingState;
+    const payloadPolicy = pendingStatePolicy;
     pendingState = null;
+    pendingStatePolicy = { allowEmptyTournaments: false };
     pendingWrite = null;
     if (!payload) return;
     const nextSerialized = JSON.stringify(payload);
@@ -528,6 +535,7 @@ function scheduleWrite(nextState) {
       stateCache = payload;
       syncedStateCache = sanitizeState(payload);
       persistRemoteCache(payload);
+      pendingStatePolicy = payloadPolicy;
     }).catch((err) => {
       console.error("Firestore write error:", err);
       emitRealtimeStatus({ online: true, connected: false });
