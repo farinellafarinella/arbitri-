@@ -127,15 +127,14 @@ function availableChallongeMatches() {
     .filter((match) => !assigned.has(String(match.id)));
 }
 
-function mergeTournamentPlayers(nextPlayers) {
+function syncTournamentPlayers(nextPlayers) {
   if (!tournament) return;
-  if (!Array.isArray(tournament.players)) tournament.players = [];
+  const uniquePlayers = [];
   nextPlayers.forEach((name) => {
     const value = String(name || "").trim();
-    if (value && !tournament.players.includes(value)) {
-      tournament.players.push(value);
-    }
+    if (value && !uniquePlayers.includes(value)) uniquePlayers.push(value);
   });
+  tournament.players = uniquePlayers;
 }
 
 function renderChallongeMatches() {
@@ -208,7 +207,7 @@ async function syncChallongeTournament(options = {}) {
       setChallongeStatus(payload.error || `Sync Challonge fallita (${response.status})`, true);
       return false;
     }
-    mergeTournamentPlayers((payload.participants || []).map((participant) => participant.name));
+    syncTournamentPlayers((payload.participants || []).map((participant) => participant.name));
     tournament.challongeState = payload.state || "";
     tournament.challongeSyncedAt = Date.now();
     tournament.challongeOpenMatches = Array.isArray(payload.openMatches) ? payload.openMatches : [];
