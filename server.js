@@ -348,8 +348,9 @@ async function challongeRequest(pathname, options = {}) {
   }
   const method = options.method || "GET";
   let lastError = null;
+  const attemptErrors = [];
 
-  for (const apiKey of CHALLONGE_API_KEYS) {
+  for (const [index, apiKey] of CHALLONGE_API_KEYS.entries()) {
     const search = new URLSearchParams(options.query || {});
     search.set("api_key", apiKey);
     const url = `https://api.challonge.com/v1${pathname}.json?${search.toString()}`;
@@ -366,9 +367,26 @@ async function challongeRequest(pathname, options = {}) {
     error.statusCode = response.status;
     error.payload = payload;
     lastError = error;
+    attemptErrors.push({
+      index: index + 1,
+      statusCode: response.status,
+      message: error.message
+    });
   }
 
-  throw lastError || new Error("Unable to contact Challonge");
+  const allNotFound = attemptErrors.length > 0 && attemptErrors.every((item) => item.statusCode === 404);
+  const allUnauthorized = attemptErrors.length > 0 && attemptErrors.every((item) => item.statusCode === 401);
+  const summary = attemptErrors.map((item) => `key ${item.index}: ${item.statusCode}`).join(", ");
+  const error = new Error(
+    allNotFound
+      ? `Nessuna delle ${attemptErrors.length} API key Challonge configurate trova questo torneo. Controlla slug/link e che almeno una key abbia accesso.`
+      : allUnauthorized
+        ? `Tutte le ${attemptErrors.length} API key Challonge configurate sono non valide o non autorizzate.`
+        : `Tutte le API key Challonge configurate hanno fallito (${summary}).`
+  );
+  error.statusCode = allNotFound ? 404 : allUnauthorized ? 401 : (lastError && lastError.statusCode) || 500;
+  error.payload = attemptErrors;
+  throw error;
 }
 
 async function fetchChallongeTournamentBundle(tournamentRef) {
