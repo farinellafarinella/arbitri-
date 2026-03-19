@@ -106,6 +106,17 @@ function parseChallongeReference(input) {
   }
 }
 
+function pickDisplayText(...values) {
+  for (const value of values) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text) continue;
+    const lowered = text.toLowerCase();
+    if (lowered === "undefined" || lowered === "null") continue;
+    return text;
+  }
+  return "";
+}
+
 async function challongeRequest(pathname, options = {}) {
   if (!CHALLONGE_API_KEY) {
     const error = new Error("Missing CHALLONGE_API_KEY env var");
@@ -137,15 +148,17 @@ function normalizeChallongeTournamentPayload(payload) {
   const matchRecords = Array.isArray(tournament.matches) ? tournament.matches : [];
   const participants = participantRecords.map((entry) => entry && entry.participant ? entry.participant : null).filter(Boolean);
   const participantById = new Map(participants.map((participant) => [String(participant.id), participant]));
-  const participantName = (participant) => String(
-    participant && (
-      participant.name ||
-      participant.display_name ||
-      participant.display_name_with_invitation_email_address ||
-      participant.username ||
-      ""
-    )
-  ).trim();
+  const participantName = (participant, fallback = "") => pickDisplayText(
+    participant && participant.name,
+    participant && participant.display_name,
+    participant && participant.display_name_with_invitation_email_address,
+    participant && participant.username,
+    participant && participant.challonge_username,
+    participant && participant.misc,
+    participant && participant.invitation_email,
+    participant && participant.email,
+    fallback
+  );
   const openMatches = matchRecords
     .map((entry) => entry && entry.match ? entry.match : null)
     .filter(Boolean)
@@ -153,6 +166,8 @@ function normalizeChallongeTournamentPayload(payload) {
     .map((match) => {
       const player1 = participantById.get(String(match.player1_id));
       const player2 = participantById.get(String(match.player2_id));
+      const player1Name = participantName(player1, match.player1_id ? `Partecipante ${match.player1_id}` : "");
+      const player2Name = participantName(player2, match.player2_id ? `Partecipante ${match.player2_id}` : "");
       return {
         id: String(match.id),
         identifier: String(match.identifier || ""),
@@ -160,8 +175,8 @@ function normalizeChallongeTournamentPayload(payload) {
         state: String(match.state || "open"),
         player1Id: String(match.player1_id),
         player2Id: String(match.player2_id),
-        player1Name: participantName(player1),
-        player2Name: participantName(player2)
+        player1Name,
+        player2Name
       };
     })
     .filter((match) => match.player1Name && match.player2Name);
@@ -172,7 +187,7 @@ function normalizeChallongeTournamentPayload(payload) {
     state: String(tournament.state || ""),
     participants: participants.map((participant) => ({
       id: String(participant.id),
-      name: participantName(participant)
+      name: participantName(participant, participant && participant.id ? `Partecipante ${participant.id}` : "")
     })).filter((participant) => participant.name),
     openMatches
   };

@@ -45,7 +45,7 @@ function renderRegistry() {
         <div class="progress-bar" style="width:${progressPercent}%"></div>
       </div>
       <div class="row" style="margin-top:8px;">
-        <button class="danger-btn remove-registry-ref" data-id="${ref.id}">Rimuovi</button>
+        <button type="button" class="danger-btn remove-registry-ref" data-id="${ref.id}">Rimuovi</button>
       </div>
     `;
     registryRefereeList.appendChild(row);
@@ -73,7 +73,7 @@ function render() {
       <div class="muted">Challonge: ${tournament.challongeUrl ? tournament.challongeUrl : "—"}</div>
       <div class="row" style="margin-top:8px;">
         <a class="arena-link" href="${href}">Apri gestione</a>
-        <button class="danger-btn" data-id="${tournament.id}">Elimina</button>
+        <button type="button" class="danger-btn remove-tournament-btn" data-id="${tournament.id}">Elimina</button>
       </div>
     `;
     tournamentList.appendChild(row);
@@ -130,8 +130,11 @@ if (registryRefereeList) {
 
 tournamentList.addEventListener("click", (event) => {
   const target = event.target;
-  if (!target.classList.contains("danger-btn")) return;
-  const tournamentId = target.dataset.id;
+  if (!(target instanceof HTMLElement)) return;
+  const button = target.closest(".remove-tournament-btn");
+  if (!button) return;
+  event.preventDefault();
+  const tournamentId = button.dataset.id;
   const tournament = state.tournaments.find((t) => t.id === tournamentId);
   if (!tournament) return;
   const ok = window.confirm(`Eliminare definitivamente il torneo \"${tournament.name}\"?`);

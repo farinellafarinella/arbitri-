@@ -1,4 +1,4 @@
-const CACHE_NAME = "arbitri-arene-v40";
+const CACHE_NAME = "arbitri-arene-v41";
 const ASSETS = [
   "./",
   "index.html",

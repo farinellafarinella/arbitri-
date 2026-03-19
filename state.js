@@ -43,14 +43,15 @@ function normalizeEmailForMerge(email) {
   return String(email || "").trim().toLowerCase();
 }
 
-function mergePendingState(baseState, nextState) {
+function mergePendingState(baseState, nextState, options = {}) {
   const merged = sanitizeState(baseState);
   const normalizedNext = sanitizeState(nextState);
+  const allowEmptyTournaments = Boolean(options.allowEmptyTournaments);
   merged.refereesRegistry = mergeReferees(merged.refereesRegistry || [], normalizedNext.refereesRegistry || []);
 
   const baseHasTournaments = Array.isArray(merged.tournaments) && merged.tournaments.length > 0;
   const nextHasTournaments = Array.isArray(normalizedNext.tournaments) && normalizedNext.tournaments.length > 0;
-  if (!baseHasTournaments || nextHasTournaments) {
+  if (allowEmptyTournaments || !baseHasTournaments || nextHasTournaments) {
     merged.tournaments = normalizedNext.tournaments;
   }
 
@@ -135,7 +136,9 @@ function saveState(state) {
       return;
     }
     sanitized.updatedAt = Date.now();
-    const mergedState = mergePendingState(baseState, sanitized);
+    const mergedState = mergePendingState(baseState, sanitized, {
+      allowEmptyTournaments: hasInitialRemoteSnapshot
+    });
     stateCache = mergedState;
     persistRemoteCache(mergedState);
     pendingState = mergedState;
@@ -245,6 +248,16 @@ function normalizeTournament(tournament) {
   };
 }
 
+function normalizePersonName(value, fallback = "") {
+  const text = String(value || "").trim();
+  if (!text) return String(fallback || "").trim();
+  const lowered = text.toLowerCase();
+  if (lowered === "undefined" || lowered === "null") {
+    return String(fallback || "").trim();
+  }
+  return text;
+}
+
 function normalizeChallongeOpenMatches(list) {
   return (Array.isArray(list) ? list : []).map((match) => ({
     id: match.id,
@@ -253,8 +266,8 @@ function normalizeChallongeOpenMatches(list) {
     state: match.state || "open",
     player1Id: match.player1Id || "",
     player2Id: match.player2Id || "",
-    player1Name: match.player1Name || "",
-    player2Name: match.player2Name || ""
+    player1Name: normalizePersonName(match.player1Name, match.player1Id ? `Partecipante ${match.player1Id}` : ""),
+    player2Name: normalizePersonName(match.player2Name, match.player2Id ? `Partecipante ${match.player2Id}` : "")
   })).filter((match) => match.id && match.player1Name && match.player2Name);
 }
 
@@ -446,7 +459,9 @@ function initFirestoreSync() {
     persistRemoteCache(stateCache);
     lastSerialized = JSON.stringify(stateCache);
     if (pendingState && (pendingState.updatedAt || 0) > (remoteState.updatedAt || 0)) {
-      const mergedPending = mergePendingState(remoteState, pendingState);
+      const mergedPending = mergePendingState(remoteState, pendingState, {
+        allowEmptyTournaments: false
+      });
       pendingState = mergedPending;
       stateCache = mergedPending;
       persistRemoteCache(stateCache);
