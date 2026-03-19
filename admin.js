@@ -99,6 +99,27 @@ function tournamentChallongeParticipantMap() {
   return map;
 }
 
+function resolvedFallbackPlayerName(fallbackNames = [], participant = {}, index = 0) {
+  const safeFallbacks = Array.isArray(fallbackNames) ? fallbackNames : [];
+  const seed = Number(participant && participant.seed) || 0;
+  const seedBased = seed > 0 ? String(safeFallbacks[seed - 1] || "").trim() : "";
+  if (seedBased && !challongePlaceholderName(seedBased)) return seedBased;
+  const indexBased = String(safeFallbacks[index] || "").trim();
+  if (indexBased && !challongePlaceholderName(indexBased)) return indexBased;
+  return "";
+}
+
+function resolveChallongeParticipants(participants = [], fallbackNames = []) {
+  return (Array.isArray(participants) ? participants : []).map((participant, index) => {
+    const id = String(participant && participant.id || "").trim();
+    const seed = Number(participant && participant.seed) || 0;
+    const rawName = String(participant && participant.name || "").trim();
+    const fallbackName = resolvedFallbackPlayerName(fallbackNames, participant, index);
+    const resolvedName = challongePlaceholderName(rawName, id) ? fallbackName || rawName : rawName;
+    return { id, seed, name: resolvedName };
+  }).filter((participant) => participant.id && participant.name);
+}
+
 function getRegisteredPushSubscriptions(referee) {
   if (!referee) return [];
   return Array.isArray(referee.webPushSubscriptions) ? referee.webPushSubscriptions.filter(Boolean) : [];
@@ -471,17 +492,12 @@ async function syncChallongeTournament(options = {}) {
       setChallongeStatus(payload.error || `Sync Challonge fallita (${response.status})`, true);
       return false;
     }
-    const participantNameMap = buildChallongeParticipantNameMap(payload.participants || []);
+    const fallbackPlayerNames = Array.isArray(tournament.players) ? [...tournament.players] : [];
+    const resolvedParticipants = resolveChallongeParticipants(payload.participants || [], fallbackPlayerNames);
+    const participantNameMap = buildChallongeParticipantNameMap(resolvedParticipants);
     const normalizedOpenMatches = normalizeChallongeMatchesWithParticipants(payload.openMatches || [], participantNameMap);
-    tournament.challongeParticipants = (payload.participants || []).filter((participant) => {
-      const id = String(participant && participant.id || "").trim();
-      const name = String(participant && participant.name || "").trim();
-      return Boolean(id && name);
-    }).map((participant) => ({
-      id: String(participant.id).trim(),
-      name: String(participant.name).trim()
-    }));
-    syncTournamentPlayers((payload.participants || []).map((participant) => participant.name));
+    tournament.challongeParticipants = resolvedParticipants;
+    syncTournamentPlayers(resolvedParticipants.map((participant) => participant.name));
     tournament.challongeState = payload.state || "";
     tournament.challongeSyncedAt = Date.now();
     tournament.challongeOpenMatches = normalizedOpenMatches;

@@ -282,6 +282,7 @@ function normalizeChallongeOpenMatches(list) {
 function normalizeChallongeParticipants(list) {
   return (Array.isArray(list) ? list : []).map((participant) => ({
     id: String(participant && participant.id || "").trim(),
+    seed: Number.isFinite(participant && participant.seed) ? participant.seed : 0,
     name: normalizePersonName(participant && participant.name, "")
   })).filter((participant) => participant.id && participant.name);
 }

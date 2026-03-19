@@ -208,6 +208,7 @@ function normalizeChallongeTournamentPayload(bundle) {
     state: String(tournament.state || ""),
     participants: participants.map((participant) => ({
       id: String(participant.id),
+      seed: Number(participant.seed) || 0,
       name: participantName(participant, participant && participant.id ? `Partecipante ${participant.id}` : "")
     })).filter((participant) => participant.name),
     openMatches
