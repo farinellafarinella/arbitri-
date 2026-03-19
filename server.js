@@ -350,6 +350,7 @@ async function challongeRequest(pathname, options = {}) {
     throw error;
   }
   const method = options.method || "GET";
+  const accessMode = String(options.accessMode || "read").trim().toLowerCase();
   let lastError = null;
   const attemptErrors = [];
 
@@ -380,14 +381,25 @@ async function challongeRequest(pathname, options = {}) {
   const allNotFound = attemptErrors.length > 0 && attemptErrors.every((item) => item.statusCode === 404);
   const allUnauthorized = attemptErrors.length > 0 && attemptErrors.every((item) => item.statusCode === 401);
   const summary = attemptErrors.map((item) => `key ${item.index}: ${item.statusCode}`).join(", ");
+  const writeMode = accessMode === "write";
   const error = new Error(
-    allNotFound
-      ? `Nessuna delle ${attemptErrors.length} API key Challonge configurate trova questo torneo. Controlla slug/link e che almeno una key abbia accesso.`
-      : allUnauthorized
-        ? `Tutte le ${attemptErrors.length} API key Challonge configurate sono non valide o non autorizzate.`
-        : `Tutte le API key Challonge configurate hanno fallito (${summary}).`
+    writeMode
+      ? (
+          allNotFound || allUnauthorized
+            ? `Nessuna delle ${attemptErrors.length} API key Challonge configurate può scrivere risultati su questo torneo.`
+            : `Scrittura Challonge fallita con tutte le API key configurate (${summary}).`
+        )
+      : (
+          allNotFound
+            ? `Nessuna delle ${attemptErrors.length} API key Challonge configurate trova questo torneo. Controlla slug/link e che almeno una key abbia accesso.`
+            : allUnauthorized
+              ? `Tutte le ${attemptErrors.length} API key Challonge configurate sono non valide o non autorizzate.`
+              : `Tutte le API key Challonge configurate hanno fallito (${summary}).`
+        )
   );
-  error.statusCode = allNotFound ? 404 : allUnauthorized ? 401 : (lastError && lastError.statusCode) || 500;
+  error.statusCode = writeMode
+    ? (allUnauthorized ? 403 : allNotFound ? 403 : (lastError && lastError.statusCode) || 500)
+    : (allNotFound ? 404 : allUnauthorized ? 401 : (lastError && lastError.statusCode) || 500);
   error.payload = attemptErrors;
   throw error;
 }
@@ -506,6 +518,7 @@ app.post("/challonge/matches/:matchId/report", async (req, res) => {
     if (scoresCsv) body.set("match[scores_csv]", scoresCsv);
     const payload = await challongeRequest(`/tournaments/${encodeURIComponent(tournamentRef)}/matches/${encodeURIComponent(matchId)}`, {
       method: "PUT",
+      accessMode: "write",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },

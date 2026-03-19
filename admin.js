@@ -708,7 +708,11 @@ async function reportChallongeResult(matchData, winnerChoice = {}) {
 
 function isChallongeReadOnlyError(error) {
   const message = String(error && error.message ? error.message : error || "").toLowerCase();
-  return message.includes("only have read access") || message.includes("read access");
+  return message.includes("only have read access")
+    || message.includes("read access")
+    || message.includes("puo scrivere risultati")
+    || message.includes("può scrivere risultati")
+    || message.includes("accesso in scrittura");
 }
 
 function maybeAutoSyncChallonge() {
