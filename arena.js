@@ -22,14 +22,34 @@ let currentRole = "";
 
 function challongeParticipantNameMap() {
   const map = new Map();
-  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
-  tournament.challongeParticipants.forEach((participant) => {
+  if (!tournament) return map;
+  const mergedParticipants = [
+    ...(Array.isArray(tournament.challongeParticipants) ? tournament.challongeParticipants : []),
+    ...(Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap : [])
+  ];
+  mergedParticipants.forEach((participant) => {
     const id = String(participant && participant.id || "").trim();
     const name = String(participant && participant.name || "").trim();
     if (!id || !name) return;
     map.set(id, name);
   });
   return map;
+}
+
+function currentWinnerOptions() {
+  const match = currentArena && currentArena.match;
+  if (!match) return [];
+  const matchNames = resolvedCurrentMatchNames();
+  return [
+    {
+      id: String(match.challongePlayer1Id || "").trim(),
+      name: matchNames.player1Name
+    },
+    {
+      id: String(match.challongePlayer2Id || "").trim(),
+      name: matchNames.player2Name
+    }
+  ].filter((entry) => entry.name);
 }
 
 function resolvedCurrentMatchNames() {
@@ -64,7 +84,7 @@ function updateArenaUI() {
   const matchNames = resolvedCurrentMatchNames();
   const hasMatch = Boolean(matchNames.player1Name && matchNames.player2Name);
   startMatchBtn.disabled = !enabled || !canStart || !hasMatch;
-  confirmWinnerBtn.disabled = !enabled || currentArena.status !== "occupied" || !hasMatch || !currentArena.selectedWinner;
+  confirmWinnerBtn.disabled = !enabled || currentArena.status !== "occupied" || !hasMatch || !(currentArena.selectedWinnerId || currentArena.selectedWinner);
   renderWinnerOptions();
   matchDisplay.textContent = hasMatch ? `${matchNames.player1Name} vs ${matchNames.player2Name}` : "—";
   if (coinResultDisplay) {
@@ -111,10 +131,13 @@ confirmWinnerBtn.addEventListener("click", () => {
   if (!currentArena.refereeName) return;
   if (currentArena.status !== "occupied") return;
   const winner = currentArena.selectedWinner;
-  if (!winner) return;
+  const winnerId = String(currentArena.selectedWinnerId || "").trim();
+  if (!winner && !winnerId) return;
   currentArena.winnerCandidate = winner;
+  currentArena.winnerCandidateId = winnerId;
   currentArena.status = "standby";
   currentArena.selectedWinner = "";
+  currentArena.selectedWinnerId = "";
   saveArena();
 });
 
@@ -219,15 +242,18 @@ function statusLabel(status) {
 function renderWinnerOptions() {
   winnerOptions.innerHTML = "";
   if (!currentArena || !currentArena.match) return;
-  const matchNames = resolvedCurrentMatchNames();
-  const options = [matchNames.player1Name, matchNames.player2Name].filter(Boolean);
-  options.forEach((name) => {
+  const options = currentWinnerOptions();
+  options.forEach((option) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `winner-btn ${currentArena.selectedWinner === name ? "active" : ""}`;
-    btn.textContent = name;
+    const isActive = option.id
+      ? currentArena.selectedWinnerId === option.id
+      : currentArena.selectedWinner === option.name;
+    btn.className = `winner-btn ${isActive ? "active" : ""}`;
+    btn.textContent = option.name;
     btn.addEventListener("click", () => {
-      currentArena.selectedWinner = name;
+      currentArena.selectedWinner = option.name;
+      currentArena.selectedWinnerId = option.id || "";
       updateArenaUI();
     });
     winnerOptions.appendChild(btn);

@@ -211,10 +211,13 @@ function createArena(name) {
     refereeId: "",
     refereeName: "",
     winnerCandidate: "",
+    winnerCandidateId: "",
     lastWinner: "",
+    lastWinnerId: "",
     calledAt: null,
     match: null,
     selectedWinner: "",
+    selectedWinnerId: "",
     coinTossResult: ""
   };
 }
@@ -402,10 +405,13 @@ function normalizeArena(arena) {
     refereeId: arena.refereeId || "",
     refereeName: arena.refereeName || "",
     winnerCandidate: arena.winnerCandidate || "",
+    winnerCandidateId: arena.winnerCandidateId || "",
     lastWinner: arena.lastWinner || arena.winner || "",
+    lastWinnerId: arena.lastWinnerId || "",
     calledAt: arena.calledAt || null,
     match: arena.match || null,
     selectedWinner: arena.selectedWinner || "",
+    selectedWinnerId: arena.selectedWinnerId || "",
     coinTossResult: arena.coinTossResult || ""
   };
 }

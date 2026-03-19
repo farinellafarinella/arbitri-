@@ -114,8 +114,12 @@ function updateAssignedArenaNames(stateValue, refereeId, nextName, previousName)
 
 function challongeParticipantNameMap(tournament) {
   const map = new Map();
-  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
-  tournament.challongeParticipants.forEach((participant) => {
+  if (!tournament) return map;
+  const mergedParticipants = [
+    ...(Array.isArray(tournament.challongeParticipants) ? tournament.challongeParticipants : []),
+    ...(Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap : [])
+  ];
+  mergedParticipants.forEach((participant) => {
     const id = String(participant && participant.id || "").trim();
     const name = String(participant && participant.name || "").trim();
     if (!id || !name) return;

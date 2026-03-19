@@ -451,6 +451,14 @@ function resolveChallongeMatchNames(match, participantNameMap = tournamentChallo
   };
 }
 
+function resolveArenaWinnerDisplayName(arena, participantNameMap = tournamentChallongeParticipantMap()) {
+  if (!arena) return "";
+  const winnerId = String(arena.winnerCandidateId || arena.selectedWinnerId || "").trim();
+  const fallbackName = String(arena.winnerCandidate || arena.selectedWinner || "").trim();
+  if (!winnerId) return fallbackName;
+  return participantNameMap.get(winnerId) || fallbackName || `Partecipante ${winnerId}`;
+}
+
 function refreshAssignedChallongeArenaNames(participantNameMap = new Map(), normalizedMatches = []) {
   if (!tournament) return;
   const matchesById = new Map((Array.isArray(normalizedMatches) ? normalizedMatches : []).map((match) => [String(match.id), match]));
@@ -656,7 +664,9 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
     challongeRound: selectedMatch.round || 0
   };
   arena.selectedWinner = "";
+  arena.selectedWinnerId = "";
   arena.winnerCandidate = "";
+  arena.winnerCandidateId = "";
   arena.coinTossResult = "";
   if (matchId) {
     delete selectedChallongeArenaByMatch[String(matchId)];
@@ -666,17 +676,21 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.`);
 }
 
-async function reportChallongeResult(matchData, winnerName) {
+async function reportChallongeResult(matchData, winnerChoice = {}) {
   if (!tournament || !tournament.challongeUrl) {
     throw new Error("Manca il link Challonge del torneo.");
   }
-  const winnerParticipantId = winnerName === matchData.p1
-    ? matchData.challongePlayer1Id
-    : matchData.challongePlayer2Id;
+  const winnerName = String(winnerChoice && winnerChoice.name || "").trim();
+  const explicitWinnerId = String(winnerChoice && winnerChoice.id || "").trim();
+  const winnerParticipantId = explicitWinnerId || (
+    winnerName === matchData.p1
+      ? matchData.challongePlayer1Id
+      : matchData.challongePlayer2Id
+  );
   if (!winnerParticipantId) {
     throw new Error("Impossibile determinare il vincitore Challonge.");
   }
-  const scoresCsv = winnerName === matchData.p1 ? "1-0" : "0-1";
+  const scoresCsv = winnerParticipantId === matchData.challongePlayer1Id ? "1-0" : "0-1";
   const response = await fetch(challongeReportEndpoint(matchData.challongeMatchId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -768,13 +782,14 @@ function render() {
   arenaList.innerHTML = "";
   const participantNameMap = tournamentChallongeParticipantMap();
   tournament.arenas.forEach((arena) => {
-    const canConfirmWinner = Boolean(arena.winnerCandidate) || (arena.status === "standby" && arena.match && arena.match.p1 && arena.match.p2);
+    const canConfirmWinner = Boolean(arena.winnerCandidateId || arena.winnerCandidate) || (arena.status === "standby" && arena.match && arena.match.p1 && arena.match.p2);
     const matchNames = arena.match && arena.match.source === "challonge"
       ? resolveChallongeMatchNames(arena.match, participantNameMap)
       : {
           player1Name: arena.match ? String(arena.match.p1 || "").trim() : "",
           player2Name: arena.match ? String(arena.match.p2 || "").trim() : ""
         };
+    const winnerDisplay = resolveArenaWinnerDisplayName(arena, participantNameMap);
     const expiredActions = arena.status === "expired"
       ? `<button class="restart-btn" data-id="${arena.id}">Riavvia chiamata</button>
          <button class="cancel-btn danger-btn" data-id="${arena.id}">Annulla match</button>`
@@ -793,7 +808,7 @@ function render() {
         <strong>${arena.name}</strong>
         <div class="muted">Arbitro: <span class="referee-name">${arena.refereeName || "—"}</span></div>
         <div class="muted">Sorteggio: <span class="winner-name">${arena.coinTossResult || "—"}</span></div>
-        <div class="muted">Vincitore: <span class="winner-name">${arena.winnerCandidate || (arena.status === "standby" ? "Da confermare" : "—")}</span></div>
+        <div class="muted">Vincitore: <span class="winner-name">${winnerDisplay || (arena.status === "standby" ? "Da confermare" : "—")}</span></div>
         <div class="muted">Match: ${arena.match ? `<span class="match-players">${matchNames.player1Name} vs ${matchNames.player2Name}</span>` : "—"}</div>
       </div>
       <div class="badge ${arena.status}">${statusLabel(arena.status)}</div>
@@ -939,7 +954,9 @@ setMatchBtn.addEventListener("click", () => {
   matchMessage.classList.remove("error");
   arena.match = { p1, p2, source: "manual" };
   arena.selectedWinner = "";
+  arena.selectedWinnerId = "";
   arena.winnerCandidate = "";
+  arena.winnerCandidateId = "";
   arena.coinTossResult = "";
   saveState(state);
   render();
@@ -1104,7 +1121,9 @@ arenaList.addEventListener("click", async (event) => {
     arena.calledAt = null;
     arena.match = null;
     arena.selectedWinner = "";
+    arena.selectedWinnerId = "";
     arena.winnerCandidate = "";
+    arena.winnerCandidateId = "";
     arena.coinTossResult = "";
     saveState(state);
     render();
@@ -1119,7 +1138,9 @@ arenaList.addEventListener("click", async (event) => {
     arena.calledAt = null;
     arena.match = null;
     arena.selectedWinner = "";
+    arena.selectedWinnerId = "";
     arena.winnerCandidate = "";
+    arena.winnerCandidateId = "";
     arena.coinTossResult = "";
     saveState(state);
     render();
@@ -1142,14 +1163,15 @@ arenaList.addEventListener("click", async (event) => {
   const arena = tournament.arenas.find((a) => a.id === arenaId);
   if (!arena) return;
   const matchData = arena.match;
-  const winnerName = resolveArenaWinnerChoice(arena);
-  if (!winnerName) return;
+  const winnerChoice = resolveArenaWinnerChoice(arena);
+  const winnerName = String(winnerChoice && winnerChoice.name || "").trim();
+  if (!winnerName && !String(winnerChoice && winnerChoice.id || "").trim()) return;
   let challongeWriteMode = "";
   if (matchData && matchData.source === "challonge" && matchData.challongeMatchId) {
     try {
       matchMessage.textContent = "Invio risultato a Challonge...";
       matchMessage.classList.remove("error");
-      await reportChallongeResult(matchData, winnerName);
+      await reportChallongeResult(matchData, winnerChoice);
       challongeWriteMode = "written";
     } catch (error) {
       if (isChallongeReadOnlyError(error)) {
@@ -1164,11 +1186,14 @@ arenaList.addEventListener("click", async (event) => {
   const refereeId = arena.refereeId;
   const refereeName = arena.refereeName;
   arena.lastWinner = winnerName;
+  arena.lastWinnerId = String(winnerChoice && winnerChoice.id || "").trim();
   arena.winnerCandidate = "";
+  arena.winnerCandidateId = "";
   arena.status = "free";
   arena.calledAt = null;
   arena.match = null;
   arena.selectedWinner = "";
+  arena.selectedWinnerId = "";
   arena.coinTossResult = "";
   if ((refereeId || refereeName) && state.refereesRegistry) {
     const ref = state.refereesRegistry.find((r) => r.id === refereeId) || state.refereesRegistry.find((r) => r.name === refereeName);
@@ -1265,15 +1290,33 @@ function renderPlayers() {
 }
 
 function resolveArenaWinnerChoice(arena) {
-  if (!arena) return "";
-  if (arena.winnerCandidate) return arena.winnerCandidate;
-  if (!arena.match || !arena.match.p1 || !arena.match.p2) return "";
-  const p1 = arena.match.p1;
-  const p2 = arena.match.p2;
+  if (!arena) return { name: "", id: "" };
+  if (arena.winnerCandidateId || arena.winnerCandidate) {
+    return {
+      name: resolveArenaWinnerDisplayName(arena),
+      id: String(arena.winnerCandidateId || "").trim()
+    };
+  }
+  if (!arena.match || !arena.match.p1 || !arena.match.p2) return { name: "", id: "" };
+  const matchNames = arena.match.source === "challonge"
+    ? resolveChallongeMatchNames(arena.match)
+    : { player1Name: arena.match.p1, player2Name: arena.match.p2 };
+  const p1 = matchNames.player1Name;
+  const p2 = matchNames.player2Name;
   const input = window.prompt(`Inserisci 1 per "${p1}" oppure 2 per "${p2}"`, "1");
   const value = String(input || "").trim().toLowerCase();
-  if (!value) return "";
-  if (value === "1" || value === p1.toLowerCase()) return p1;
-  if (value === "2" || value === p2.toLowerCase()) return p2;
-  return "";
+  if (!value) return { name: "", id: "" };
+  if (value === "1" || value === p1.toLowerCase()) {
+    return {
+      name: p1,
+      id: String(arena.match.challongePlayer1Id || "").trim()
+    };
+  }
+  if (value === "2" || value === p2.toLowerCase()) {
+    return {
+      name: p2,
+      id: String(arena.match.challongePlayer2Id || "").trim()
+    };
+  }
+  return { name: "", id: "" };
 }

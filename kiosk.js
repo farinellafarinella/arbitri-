@@ -12,8 +12,12 @@ let bannerTimer = null;
 
 function challongeParticipantNameMap() {
   const map = new Map();
-  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
-  tournament.challongeParticipants.forEach((participant) => {
+  if (!tournament) return map;
+  const mergedParticipants = [
+    ...(Array.isArray(tournament.challongeParticipants) ? tournament.challongeParticipants : []),
+    ...(Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap : [])
+  ];
+  mergedParticipants.forEach((participant) => {
     const id = String(participant && participant.id || "").trim();
     const name = String(participant && participant.name || "").trim();
     if (!id || !name) return;
@@ -32,6 +36,14 @@ function resolveArenaMatchNames(arena) {
     player1Name: participantMap.get(player1Id) || String(match.p1 || "").trim(),
     player2Name: participantMap.get(player2Id) || String(match.p2 || "").trim()
   };
+}
+
+function resolveArenaWinnerName(arena) {
+  const participantMap = challongeParticipantNameMap();
+  const winnerId = String(arena && (arena.winnerCandidateId || arena.lastWinnerId) || "").trim();
+  const fallbackName = String(arena && (arena.winnerCandidate || arena.lastWinner) || "").trim();
+  if (!winnerId) return fallbackName;
+  return participantMap.get(winnerId) || fallbackName || `Partecipante ${winnerId}`;
 }
 
 function render() {
@@ -75,6 +87,7 @@ function render() {
     const timerHtml = arena.status === "called" && arena.calledAt
       ? `<div class="${timerClass}">${formatCountdown(arena.calledAt)}</div>`
       : "";
+    const winnerName = resolveArenaWinnerName(arena);
 
     card.innerHTML = `
       <div class="kiosk-header">
@@ -87,7 +100,7 @@ function render() {
         ${matchHtml}
         ${timerHtml}
         <div>Sorteggio: <span class="winner-name">${arena.coinTossResult || "—"}</span></div>
-        <div>Vincitore: <span class="winner-name">${arena.winnerCandidate || "—"}</span></div>
+        <div>Vincitore: <span class="winner-name">${winnerName || "—"}</span></div>
       </div>
     `;
     kioskGrid.appendChild(card);
