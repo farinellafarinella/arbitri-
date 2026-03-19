@@ -140,7 +140,7 @@ tournamentList.addEventListener("click", (event) => {
   const ok = window.confirm(`Eliminare definitivamente il torneo \"${tournament.name}\"?`);
   if (!ok) return;
   state.tournaments = state.tournaments.filter((t) => t.id !== tournamentId);
-  saveState(state);
+  saveState(state, { allowEmptyTournaments: true });
   render();
 });
 

@@ -6,10 +6,15 @@ const tournamentRefereeSelect = document.getElementById("tournamentRefereeSelect
 const addTournamentRefereeBtn = document.getElementById("addTournamentRefereeBtn");
 const tournamentRefereeList = document.getElementById("tournamentRefereeList");
 const tournamentRefereeMessage = document.getElementById("tournamentRefereeMessage");
+const generateRefereeLineupBtn = document.getElementById("generateRefereeLineupBtn");
+const refereeLineupStatus = document.getElementById("refereeLineupStatus");
+const activeRefereeList = document.getElementById("activeRefereeList");
+const reserveRefereeList = document.getElementById("reserveRefereeList");
 const assignBtn = document.getElementById("assignBtn");
 const arenaList = document.getElementById("arenaList");
 const tournamentTitle = document.getElementById("tournamentTitle");
 const matchArenaSelect = document.getElementById("matchArenaSelect");
+const matchArenaBoard = document.getElementById("matchArenaBoard");
 const player1Input = document.getElementById("player1Input");
 const player2Input = document.getElementById("player2Input");
 const setMatchBtn = document.getElementById("setMatchBtn");
@@ -65,6 +70,21 @@ function setChallongeStatus(text, isError = false) {
   if (!challongeStatus) return;
   challongeStatus.textContent = text;
   challongeStatus.classList.toggle("error", isError);
+}
+
+function setRefereeLineupStatus(text = "", isError = false) {
+  if (!refereeLineupStatus) return;
+  refereeLineupStatus.textContent = text;
+  refereeLineupStatus.classList.toggle("error", Boolean(text) && isError);
+}
+
+function tournamentRegistryReferees() {
+  if (!tournament) return [];
+  const registry = (state.refereesRegistry || []).filter((ref) => ref.authUid);
+  const ids = Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [];
+  return ids
+    .map((id) => registry.find((ref) => ref.id === id))
+    .filter(Boolean);
 }
 
 function getRegisteredPushSubscriptions(referee) {
@@ -147,6 +167,204 @@ function syncTournamentPlayers(nextPlayers) {
   tournament.players = uniquePlayers;
 }
 
+function renderRefereeLineup() {
+  if (!activeRefereeList || !reserveRefereeList) return;
+  activeRefereeList.innerHTML = "";
+  reserveRefereeList.innerHTML = "";
+  if (!tournament) return;
+
+  const tournamentRefs = tournamentRegistryReferees();
+  const assignedIds = new Set();
+  const assignedNames = new Set();
+  const activeAssignments = [];
+
+  (tournament.arenas || []).forEach((arena) => {
+    if (!arena.refereeId && !arena.refereeName) return;
+    const ref = tournamentRefs.find((item) => item.id === arena.refereeId)
+      || (state.refereesRegistry || []).find((item) => item.id === arena.refereeId)
+      || tournamentRefs.find((item) => item.name === arena.refereeName);
+    const refereeName = ref ? ref.name : String(arena.refereeName || "").trim();
+    if (arena.refereeId) assignedIds.add(arena.refereeId);
+    if (refereeName) assignedNames.add(refereeName.toLowerCase());
+    activeAssignments.push({
+      arenaName: arena.name,
+      refereeName: refereeName || "Arbitro non trovato",
+      status: arena.status
+    });
+  });
+
+  const reserves = tournamentRefs.filter((ref) =>
+    !assignedIds.has(ref.id) && !assignedNames.has(ref.name.trim().toLowerCase())
+  );
+
+  if (activeAssignments.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "Nessun arbitro assegnato alle arene.";
+    activeRefereeList.appendChild(empty);
+  } else {
+    activeAssignments.forEach((assignment) => {
+      const row = document.createElement("div");
+      row.className = "list-row roster-item";
+      row.innerHTML = `
+        <strong>${assignment.refereeName}</strong>
+        <div class="muted">${assignment.arenaName}</div>
+        <div class="muted">Stato arena: ${statusLabel(assignment.status)}</div>
+      `;
+      activeRefereeList.appendChild(row);
+    });
+  }
+
+  if (reserves.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = "Nessuna riserva disponibile.";
+    reserveRefereeList.appendChild(empty);
+  } else {
+    reserves.forEach((ref) => {
+      const row = document.createElement("div");
+      row.className = "list-row roster-item";
+      const levelInfo = getRefereeLevelInfo(ref.exp || 0);
+      row.innerHTML = `
+        <strong>${ref.name}</strong>
+        <div class="muted">Riserva</div>
+        <div class="muted">Lv ${levelInfo.level}</div>
+      `;
+      reserveRefereeList.appendChild(row);
+    });
+  }
+
+  const unstaffedArenaCount = (tournament.arenas || []).filter((arena) => !arena.refereeId && !arena.refereeName).length;
+  setRefereeLineupStatus(`${activeAssignments.length} arbitri in arena, ${reserves.length} riserve, ${unstaffedArenaCount} arene senza arbitro.`);
+}
+
+function renderMatchArenaBoard() {
+  if (!matchArenaBoard) return;
+  matchArenaBoard.innerHTML = "";
+  if (!tournament) return;
+  const selectedArenaId = matchArenaSelect ? String(matchArenaSelect.value || "") : "";
+  (tournament.arenas || []).forEach((arena) => {
+    const isReady = arena.status === "free" && !arena.match;
+    const boardBadge = isReady
+      ? "Libera"
+      : arena.status === "free" && arena.match
+        ? "Con match"
+        : statusLabel(arena.status);
+    const note = isReady
+      ? "Pronta per caricare un match"
+      : arena.match
+        ? `${arena.match.p1} vs ${arena.match.p2}`
+        : `Stato: ${statusLabel(arena.status)}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `quick-arena-btn${selectedArenaId === arena.id ? " is-selected" : ""}`;
+    button.dataset.id = arena.id;
+    button.innerHTML = `
+      <span class="light ${arena.status}" aria-hidden="true"></span>
+      <span class="quick-arena-copy">
+        <strong>${arena.name}</strong>
+        <span class="muted">Arbitro: ${arena.refereeName || "—"}</span>
+        <span class="quick-arena-note">${note}</span>
+      </span>
+      <span class="badge ${arena.status}">${boardBadge}</span>
+    `;
+    matchArenaBoard.appendChild(button);
+  });
+}
+
+function generateRefereeLineup() {
+  if (!tournament) return;
+  const availableRefs = tournamentRegistryReferees();
+  if (availableRefs.length === 0) {
+    setRefereeLineupStatus("Aggiungi prima arbitri al torneo.", true);
+    return;
+  }
+
+  const usedIds = new Set();
+  const usedNames = new Set();
+  (tournament.arenas || []).forEach((arena) => {
+    if (arena.refereeId) usedIds.add(arena.refereeId);
+    if (arena.refereeName) usedNames.add(String(arena.refereeName).trim().toLowerCase());
+  });
+
+  const queue = availableRefs.filter((ref) =>
+    !usedIds.has(ref.id) && !usedNames.has(ref.name.trim().toLowerCase())
+  );
+
+  let assignedCount = 0;
+  (tournament.arenas || []).forEach((arena) => {
+    if (arena.refereeId || arena.refereeName) return;
+    const nextRef = queue.shift();
+    if (!nextRef) return;
+    arena.refereeId = nextRef.id;
+    arena.refereeName = nextRef.name;
+    assignedCount += 1;
+  });
+
+  if (assignedCount === 0) {
+    setRefereeLineupStatus("Nessuna arena libera da riempire oppure nessuna riserva disponibile.", true);
+    renderRefereeLineup();
+    return;
+  }
+
+  saveState(state);
+  render();
+  setRefereeLineupStatus(`Lista aggiornata: ${assignedCount} arbitri assegnati alle arene libere.`);
+}
+
+function challongePlaceholderName(name, participantId = "") {
+  const text = String(name || "").trim();
+  const id = String(participantId || "").trim();
+  if (!text) return true;
+  return Boolean(id) && text === `Partecipante ${id}`;
+}
+
+function buildChallongeParticipantNameMap(participants = []) {
+  const map = new Map();
+  (Array.isArray(participants) ? participants : []).forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name || challongePlaceholderName(name, id)) return;
+    map.set(id, name);
+  });
+  return map;
+}
+
+function normalizeChallongeMatchesWithParticipants(matches = [], participantNameMap = new Map()) {
+  return (Array.isArray(matches) ? matches : []).map((match) => {
+    const player1Id = String(match && match.player1Id || "").trim();
+    const player2Id = String(match && match.player2Id || "").trim();
+    const mappedPlayer1 = participantNameMap.get(player1Id) || "";
+    const mappedPlayer2 = participantNameMap.get(player2Id) || "";
+    return {
+      ...match,
+      player1Name: mappedPlayer1 || String(match && match.player1Name || "").trim() || (player1Id ? `Partecipante ${player1Id}` : ""),
+      player2Name: mappedPlayer2 || String(match && match.player2Name || "").trim() || (player2Id ? `Partecipante ${player2Id}` : "")
+    };
+  }).filter((match) => match.id && match.player1Name && match.player2Name);
+}
+
+function refreshAssignedChallongeArenaNames(participantNameMap = new Map(), normalizedMatches = []) {
+  if (!tournament) return;
+  const matchesById = new Map((Array.isArray(normalizedMatches) ? normalizedMatches : []).map((match) => [String(match.id), match]));
+  (tournament.arenas || []).forEach((arena) => {
+    const match = arena && arena.match;
+    if (!match || match.source !== "challonge") return;
+    const syncedMatch = matchesById.get(String(match.challongeMatchId || ""));
+    if (syncedMatch) {
+      match.p1 = syncedMatch.player1Name;
+      match.p2 = syncedMatch.player2Name;
+      return;
+    }
+    const player1Id = String(match.challongePlayer1Id || "").trim();
+    const player2Id = String(match.challongePlayer2Id || "").trim();
+    const player1Name = participantNameMap.get(player1Id);
+    const player2Name = participantNameMap.get(player2Id);
+    if (player1Name) match.p1 = player1Name;
+    if (player2Name) match.p2 = player2Name;
+  });
+}
+
 function renderChallongeMatches() {
   if (!challongeMatchList) return;
   challongeMatchList.innerHTML = "";
@@ -217,10 +435,13 @@ async function syncChallongeTournament(options = {}) {
       setChallongeStatus(payload.error || `Sync Challonge fallita (${response.status})`, true);
       return false;
     }
+    const participantNameMap = buildChallongeParticipantNameMap(payload.participants || []);
+    const normalizedOpenMatches = normalizeChallongeMatchesWithParticipants(payload.openMatches || [], participantNameMap);
     syncTournamentPlayers((payload.participants || []).map((participant) => participant.name));
     tournament.challongeState = payload.state || "";
     tournament.challongeSyncedAt = Date.now();
-    tournament.challongeOpenMatches = Array.isArray(payload.openMatches) ? payload.openMatches : [];
+    tournament.challongeOpenMatches = normalizedOpenMatches;
+    refreshAssignedChallongeArenaNames(participantNameMap, normalizedOpenMatches);
     saveState(state);
     render();
     if (!options.silent) {
@@ -330,6 +551,9 @@ function render() {
   }
 
   tournamentTitle.textContent = tournament.name;
+  const previousArenaId = arenaSelect ? String(arenaSelect.value || "") : "";
+  const previousMatchArenaId = matchArenaSelect ? String(matchArenaSelect.value || "") : "";
+  const previousRefereeId = refereeSelect ? String(refereeSelect.value || "") : "";
   arenaSelect.innerHTML = "";
   matchArenaSelect.innerHTML = "";
   if (challongeUrlInput) {
@@ -348,12 +572,15 @@ function render() {
     matchArenaSelect.appendChild(matchOption);
   });
 
+  if (previousArenaId && Array.from(arenaSelect.options).some((option) => option.value === previousArenaId)) {
+    arenaSelect.value = previousArenaId;
+  }
+  if (previousMatchArenaId && Array.from(matchArenaSelect.options).some((option) => option.value === previousMatchArenaId)) {
+    matchArenaSelect.value = previousMatchArenaId;
+  }
+
   refereeSelect.innerHTML = "";
-  const registry = (state.refereesRegistry || []).filter((ref) => ref.authUid);
-  const tournamentRefs = Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [];
-  const tournamentRefEntries = tournamentRefs
-    .map((id) => registry.find((ref) => ref.id === id))
-    .filter(Boolean);
+  const tournamentRefEntries = tournamentRegistryReferees();
   if (tournamentRefEntries.length === 0) {
     const option = document.createElement("option");
     option.value = "";
@@ -367,6 +594,10 @@ function render() {
       option.textContent = `${ref.name} (Lv ${levelInfo.level})`;
       refereeSelect.appendChild(option);
     });
+  }
+
+  if (previousRefereeId && Array.from(refereeSelect.options).some((option) => option.value === previousRefereeId)) {
+    refereeSelect.value = previousRefereeId;
   }
 
   arenaList.innerHTML = "";
@@ -405,8 +636,10 @@ function render() {
   });
 
   renderTournamentReferees();
+  renderRefereeLineup();
   renderPlayers();
   renderChallongeMatches();
+  renderMatchArenaBoard();
   if (challongeStatus && (!challongeStatus.textContent || challongeStatus.textContent === "Nessuna sincronizzazione eseguita.")) {
     if (!tournament.challongeUrl) {
       setChallongeStatus("Nessun link Challonge collegato.");
@@ -441,17 +674,15 @@ function renderTournamentReferees() {
     });
   }
 
-  const ids = Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [];
-  if (ids.length === 0) {
+  const entries = tournamentRegistryReferees();
+  if (entries.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
     empty.textContent = "Nessun arbitro associato al torneo.";
     tournamentRefereeList.appendChild(empty);
     return;
   }
-  ids.forEach((id) => {
-    const ref = registry.find((r) => r.id === id);
-    if (!ref) return;
+  entries.forEach((ref) => {
     const levelInfo = getRefereeLevelInfo(ref.exp || 0);
     const progressTotal = Math.max(1, levelInfo.progressMax - levelInfo.progressMin);
     const progressValue = Math.min(progressTotal, Math.max(0, (ref.exp || 0) - levelInfo.progressMin));
@@ -519,6 +750,12 @@ if (addTournamentRefereeBtn) {
   });
 }
 
+if (generateRefereeLineupBtn) {
+  generateRefereeLineupBtn.addEventListener("click", () => {
+    generateRefereeLineup();
+  });
+}
+
 setMatchBtn.addEventListener("click", () => {
   const arenaId = matchArenaSelect.value;
   if (!arenaId || !tournament) return;
@@ -543,6 +780,12 @@ setMatchBtn.addEventListener("click", () => {
   player1Input.value = "";
   player2Input.value = "";
 });
+
+if (matchArenaSelect) {
+  matchArenaSelect.addEventListener("change", () => {
+    renderMatchArenaBoard();
+  });
+}
 
 if (saveChallongeUrlBtn) {
   saveChallongeUrlBtn.addEventListener("click", saveChallongeUrl);
@@ -577,6 +820,19 @@ if (challongeMatchList) {
     const matchId = target.dataset.id;
     if (!matchId) return;
     loadChallongeMatchIntoArena(matchId);
+  });
+}
+
+if (matchArenaBoard) {
+  matchArenaBoard.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest(".quick-arena-btn");
+    if (!button || !matchArenaSelect) return;
+    const arenaId = button.dataset.id;
+    if (!arenaId) return;
+    matchArenaSelect.value = arenaId;
+    renderMatchArenaBoard();
   });
 }
 

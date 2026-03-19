@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
     <title>Gestione Torneo</title>
     <link rel="apple-touch-icon" href="icon.png" />
-    <link rel="manifest" href="manifest.json?v=20260319j" />
+    <link rel="manifest" href="manifest.json?v=20260319l" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="admin-page">
@@ -37,13 +37,27 @@
 
           <div class="card">
             <h2>Arbitri torneo</h2>
-            <div class="muted">Seleziona dall'albo arbitri (pagina Tornei).</div>
+            <div class="muted">Seleziona dall'albo arbitri (pagina Tornei). Puoi anche riempire automaticamente le arene libere e vedere subito chi resta in riserva.</div>
             <div class="row">
               <select id="tournamentRefereeSelect"></select>
               <button id="addTournamentRefereeBtn">Aggiungi</button>
             </div>
             <div id="tournamentRefereeList" class="list"></div>
             <div id="tournamentRefereeMessage" class="muted"></div>
+            <div class="row">
+              <button id="generateRefereeLineupBtn" type="button">Genera lista arene/riserve</button>
+            </div>
+            <div id="refereeLineupStatus" class="muted"></div>
+            <div class="roster-grid">
+              <div class="roster-column">
+                <h3>Arbitri in arena</h3>
+                <div id="activeRefereeList" class="list compact-list"></div>
+              </div>
+              <div class="roster-column">
+                <h3>Riserve</h3>
+                <div id="reserveRefereeList" class="list compact-list"></div>
+              </div>
+            </div>
           </div>
 
           <div class="card">
@@ -65,6 +79,8 @@
               <button id="setMatchBtn">Carica</button>
             </div>
             <div id="matchMessage" class="muted"></div>
+            <div class="muted" style="margin-top:10px;">Arene disponibili adesso. Tocca una card per selezionarla.</div>
+            <div id="matchArenaBoard" class="quick-arena-board"></div>
             <datalist id="playersList"></datalist>
           </div>
 
@@ -124,15 +140,15 @@
 
     </div>
 
-    <script src="firebase-config.js?v=20260319j"></script>
+    <script src="firebase-config.js?v=20260319l"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="state.js?v=20260319j"></script>
-    <script src="status.js?v=20260319j"></script>
-    <script src="auth.js?v=20260319j"></script>
-    <script src="admin.js?v=20260319j"></script>
-    <script src="kiosk-link.js?v=20260319j"></script>
-    <script src="register-sw.js?v=20260319j"></script>
+    <script src="state.js?v=20260319l"></script>
+    <script src="status.js?v=20260319l"></script>
+    <script src="auth.js?v=20260319l"></script>
+    <script src="admin.js?v=20260319l"></script>
+    <script src="kiosk-link.js?v=20260319l"></script>
+    <script src="register-sw.js?v=20260319l"></script>
   </body>
 </html>

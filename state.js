@@ -123,7 +123,7 @@ function loadState() {
   }
 }
 
-function saveState(state) {
+function saveState(state, options = {}) {
   const normalized = normalizeState(state);
   if (hasFirebaseConfig && hasFirebaseSdk) {
     const baseState = hasMeaningfulState(syncedStateCache)
@@ -137,7 +137,9 @@ function saveState(state) {
       pendingStatePolicy = { allowEmptyTournaments: false };
       return;
     }
-    const allowEmptyTournaments = hasInitialRemoteSnapshot;
+    const allowEmptyTournaments = options.allowEmptyTournaments == null
+      ? hasInitialRemoteSnapshot
+      : Boolean(options.allowEmptyTournaments);
     sanitized.updatedAt = Date.now();
     const mergedState = mergePendingState(baseState, sanitized, {
       allowEmptyTournaments

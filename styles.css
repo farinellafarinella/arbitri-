@@ -46,6 +46,11 @@ h2 {
   font-size: 18px;
 }
 
+h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
 p {
   margin: 0;
   color: var(--muted);
@@ -409,6 +414,10 @@ button:disabled {
   margin-top: 12px;
 }
 
+.compact-list {
+  margin-top: 0;
+}
+
 .list-row {
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -509,6 +518,71 @@ button:disabled {
   color: #facc15;
   font-weight: 600;
   text-decoration: none;
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.roster-column {
+  background: #111318;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.roster-item {
+  display: grid;
+  gap: 4px;
+}
+
+.roster-item strong {
+  font-size: 14px;
+}
+
+.quick-arena-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.quick-arena-btn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+  text-align: left;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.quick-arena-btn.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.35);
+}
+
+.quick-arena-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.quick-arena-copy strong {
+  font-size: 15px;
+}
+
+.quick-arena-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .arena-page .app {
