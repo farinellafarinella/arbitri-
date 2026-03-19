@@ -92,6 +92,8 @@ function parseChallongeReference(input) {
       slug = pathParts[pathParts.length - 1] || "";
     }
     if (!slug) return "";
+    if (ignoredSegments.has(String(slug).toLowerCase())) return "";
+    if (/^[a-z]{2}(?:-[a-z]{2})?$/i.test(slug)) return "";
     const subdomain = url.hostname.endsWith(".challonge.com")
       ? url.hostname.replace(/\.challonge\.com$/i, "")
       : "";
@@ -186,7 +188,10 @@ app.get("/push-public-key", (req, res) => {
 app.get("/challonge/tournament", async (req, res) => {
   const tournamentRef = parseChallongeReference(req.query.url);
   if (!tournamentRef) {
-    return res.status(400).json({ ok: false, error: "Missing Challonge tournament URL" });
+    return res.status(400).json({
+      ok: false,
+      error: "Link Challonge non valido. Incolla il link diretto del torneo, ad esempio https://challonge.com/tuo_slug"
+    });
   }
   try {
     const payload = await challongeRequest(`/tournaments/${encodeURIComponent(tournamentRef)}`, {

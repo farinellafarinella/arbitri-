@@ -226,7 +226,9 @@ async function syncChallongeTournament(options = {}) {
     if (!options.silent) {
       const challongeName = String(payload.name || tournament.name || "senza nome").trim();
       const challongeState = challongeStateLabel(payload.state);
-      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti. Torneo: ${challongeName}. Stato: ${challongeState}.`);
+      const challongeRef = String(payload.tournamentRef || "").trim();
+      const refText = challongeRef ? ` Ref: ${challongeRef}.` : "";
+      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti. Torneo: ${challongeName}. Stato: ${challongeState}.${refText}`);
     }
     return true;
   } catch (error) {

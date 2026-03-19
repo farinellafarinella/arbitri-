@@ -13,6 +13,7 @@ let pendingWrite = null;
 let pendingState = null;
 let lastSerialized = "";
 let hasInitialRemoteSnapshot = false;
+let syncedStateCache = { tournaments: [], refereesRegistry: [], updatedAt: 0 };
 
 function mergeReferees(baseList, incomingList) {
   const merged = [...(baseList || []).map((ref) => normalizeRefereeRegistry([ref])[0]).filter(Boolean)];
@@ -86,7 +87,10 @@ function loadState() {
   if (hasFirebaseConfig && hasFirebaseSdk) {
     if (!hasMeaningfulState(stateCache)) {
       const cached = loadPersistedRemoteCache();
-      if (cached) stateCache = cached;
+      if (cached) {
+        stateCache = cached;
+        if (!hasMeaningfulState(syncedStateCache)) syncedStateCache = sanitizeState(cached);
+      }
     }
     return stateCache;
   }
@@ -120,12 +124,12 @@ function loadState() {
 function saveState(state) {
   const normalized = normalizeState(state);
   if (hasFirebaseConfig && hasFirebaseSdk) {
-    const baseState = hasMeaningfulState(stateCache)
-      ? stateCache
+    const baseState = hasMeaningfulState(syncedStateCache)
+      ? syncedStateCache
       : (loadPersistedRemoteCache() || { tournaments: [], refereesRegistry: [], updatedAt: 0 });
     const sanitized = sanitizeState(normalized);
     if (sameMeaningfulState(baseState, sanitized)) {
-      stateCache = sanitizeState(baseState);
+      stateCache = sanitizeState(sanitized);
       persistRemoteCache(stateCache);
       pendingState = null;
       return;
@@ -411,6 +415,7 @@ function initFirestoreSync() {
   const cached = loadPersistedRemoteCache();
   if (cached) {
     stateCache = cached;
+    syncedStateCache = sanitizeState(cached);
     lastSerialized = JSON.stringify(stateCache);
   }
   const app = firebase.initializeApp(window.FIREBASE_CONFIG);
@@ -424,6 +429,7 @@ function initFirestoreSync() {
       emitRealtimeStatus({ online: true, connected: true });
       if (!hasMeaningfulState(stateCache)) {
         stateCache = { tournaments: [], refereesRegistry: [], updatedAt: 0 };
+        syncedStateCache = sanitizeState(stateCache);
         persistRemoteCache(stateCache);
       } else {
         scheduleWrite(stateCache);
@@ -436,6 +442,7 @@ function initFirestoreSync() {
     const remoteState = normalizeState(data);
     hasInitialRemoteSnapshot = true;
     stateCache = remoteState;
+    syncedStateCache = sanitizeState(remoteState);
     persistRemoteCache(stateCache);
     lastSerialized = JSON.stringify(stateCache);
     if (pendingState && (pendingState.updatedAt || 0) > (remoteState.updatedAt || 0)) {
@@ -504,6 +511,7 @@ function scheduleWrite(nextState) {
     stateDocRef.set(payload).then(() => {
       lastSerialized = nextSerialized;
       stateCache = payload;
+      syncedStateCache = sanitizeState(payload);
       persistRemoteCache(payload);
     }).catch((err) => {
       console.error("Firestore write error:", err);
