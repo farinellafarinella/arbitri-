@@ -117,8 +117,12 @@ function assignRefereeToArena(refereeId, arenaId, options = {}) {
 
 function tournamentChallongeParticipantMap() {
   const map = new Map();
-  if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
-  tournament.challongeParticipants.forEach((participant) => {
+  if (!tournament) return map;
+  const mergedParticipants = [
+    ...(Array.isArray(tournament.challongeParticipants) ? tournament.challongeParticipants : []),
+    ...(Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap : [])
+  ];
+  mergedParticipants.forEach((participant) => {
     const id = String(participant && participant.id || "").trim();
     const name = String(participant && participant.name || "").trim();
     if (!id || !name || challongePlaceholderName(name, id)) return;
@@ -146,6 +150,21 @@ function resolveChallongeParticipants(participants = [], fallbackNames = []) {
     const resolvedName = challongePlaceholderName(rawName, id) ? fallbackName || rawName : rawName;
     return { id, seed, name: resolvedName };
   }).filter((participant) => participant.id && participant.name);
+}
+
+function mergeChallongePlayerMaps(currentList = [], incomingList = []) {
+  const merged = new Map();
+  [...(Array.isArray(currentList) ? currentList : []), ...(Array.isArray(incomingList) ? incomingList : [])].forEach((participant) => {
+    const id = String(participant && participant.id || "").trim();
+    const name = String(participant && participant.name || "").trim();
+    if (!id || !name || challongePlaceholderName(name, id)) return;
+    merged.set(id, {
+      id,
+      seed: Number(participant && participant.seed) || 0,
+      name
+    });
+  });
+  return Array.from(merged.values());
 }
 
 function getRegisteredPushSubscriptions(referee) {
@@ -536,6 +555,7 @@ function saveChallongeUrl() {
   tournament.challongeState = "";
   tournament.challongeSyncedAt = 0;
   tournament.challongeParticipants = [];
+  tournament.challongePlayerMap = [];
   tournament.challongeOpenMatches = [];
   challongeAutoSyncKey = "";
   saveState(state);
@@ -561,10 +581,19 @@ async function syncChallongeTournament(options = {}) {
       return false;
     }
     const fallbackPlayerNames = Array.isArray(tournament.players) ? [...tournament.players] : [];
+    const existingResolvedPlayers = Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap : [];
     const resolvedParticipants = resolveChallongeParticipants(payload.participants || [], fallbackPlayerNames);
-    const participantNameMap = buildChallongeParticipantNameMap(resolvedParticipants);
+    const mergedResolvedPlayers = mergeChallongePlayerMaps(existingResolvedPlayers, resolvedParticipants);
+    const participantNameMap = buildChallongeParticipantNameMap(mergedResolvedPlayers);
     const normalizedOpenMatches = normalizeChallongeMatchesWithParticipants(payload.openMatches || [], participantNameMap);
     tournament.challongeParticipants = resolvedParticipants;
+    tournament.challongePlayerMap = mergeChallongePlayerMaps(existingResolvedPlayers, [
+      ...resolvedParticipants,
+      ...normalizedOpenMatches.flatMap((match) => ([
+        { id: match.player1Id, name: match.player1Name },
+        { id: match.player2Id, name: match.player2Name }
+      ]))
+    ]);
     syncTournamentPlayers(resolvedParticipants.map((participant) => participant.name));
     tournament.challongeState = payload.state || "";
     tournament.challongeSyncedAt = Date.now();

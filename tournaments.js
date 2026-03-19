@@ -15,11 +15,13 @@ function renderRegistry() {
   if (!registryRefereeList) return;
   registryRefereeList.innerHTML = "";
   registryRefereeMessage.textContent = "";
-  const list = (state.refereesRegistry || []).filter((ref) => ref.authUid);
+  const list = (state.refereesRegistry || []).slice().sort((left, right) =>
+    String(left && left.name || "").localeCompare(String(right && right.name || ""), "it", { sensitivity: "base" })
+  );
   if (list.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
-    empty.textContent = "Nessun arbitro ha ancora fatto login.";
+    empty.textContent = "Nessun arbitro presente nell'albo.";
     registryRefereeList.appendChild(empty);
     return;
   }
@@ -31,11 +33,14 @@ function renderRegistry() {
     const expToNextText = levelInfo.nextLevel
       ? `EXP mancanti al prossimo livello: ${levelInfo.expToNext}`
       : "Livello massimo raggiunto";
+    const hasLinkedAccount = Boolean(ref.authUid);
+    const hasEmail = Boolean(String(ref.email || "").trim());
     const row = document.createElement("div");
     row.className = "list-row";
     row.innerHTML = `
       <strong>${ref.name}</strong>
-      <div class="muted">Account: collegato</div>
+      <div class="muted">Account: ${hasLinkedAccount ? "collegato" : "non collegato"}</div>
+      <div class="muted">Email: ${hasEmail ? ref.email : "—"}</div>
       <div class="muted">Livello: Lv. ${levelInfo.level} - ${levelInfo.title}</div>
       <div class="muted">Partite arbitrate: ${ref.matchesArbitrated || 0}</div>
       <div class="muted">Tornei arbitrati: ${Array.isArray(ref.tournamentsArbitrated) ? ref.tournamentsArbitrated.length : 0}</div>
@@ -115,6 +120,8 @@ if (registryRefereeList) {
     state.tournaments = (state.tournaments || []).map((tournament) => {
       const ids = Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [];
       tournament.refereeIds = ids.filter((id) => id !== refId);
+      tournament.referees = (Array.isArray(tournament.referees) ? tournament.referees : [])
+        .filter((name) => !removedRef || name !== removedRef.name);
       tournament.arenas.forEach((arena) => {
         if (removedRef && (arena.refereeId === removedRef.id || arena.refereeName === removedRef.name)) {
           arena.refereeId = "";
@@ -123,7 +130,7 @@ if (registryRefereeList) {
       });
       return tournament;
     });
-    saveState(state);
+    saveState(state, { allowRegistryDeletes: true });
     render();
   });
 }

@@ -11,7 +11,7 @@ let stateDocRef = null;
 let realtimeStatus = { online: false, connected: false };
 let pendingWrite = null;
 let pendingState = null;
-let pendingStatePolicy = { allowEmptyTournaments: false };
+let pendingStatePolicy = { allowEmptyTournaments: false, allowRegistryDeletes: false };
 let lastSerialized = "";
 let hasInitialRemoteSnapshot = false;
 let syncedStateCache = { tournaments: [], refereesRegistry: [], updatedAt: 0 };
@@ -48,7 +48,10 @@ function mergePendingState(baseState, nextState, options = {}) {
   const merged = sanitizeState(baseState);
   const normalizedNext = sanitizeState(nextState);
   const allowEmptyTournaments = Boolean(options.allowEmptyTournaments);
-  merged.refereesRegistry = mergeReferees(merged.refereesRegistry || [], normalizedNext.refereesRegistry || []);
+  const allowRegistryDeletes = Boolean(options.allowRegistryDeletes);
+  merged.refereesRegistry = allowRegistryDeletes
+    ? normalizeRefereeRegistry(normalizedNext.refereesRegistry || [])
+    : mergeReferees(merged.refereesRegistry || [], normalizedNext.refereesRegistry || []);
 
   const baseHasTournaments = Array.isArray(merged.tournaments) && merged.tournaments.length > 0;
   const nextHasTournaments = Array.isArray(normalizedNext.tournaments) && normalizedNext.tournaments.length > 0;
@@ -134,20 +137,22 @@ function saveState(state, options = {}) {
       stateCache = sanitizeState(sanitized);
       persistRemoteCache(stateCache);
       pendingState = null;
-      pendingStatePolicy = { allowEmptyTournaments: false };
+      pendingStatePolicy = { allowEmptyTournaments: false, allowRegistryDeletes: false };
       return;
     }
     const allowEmptyTournaments = options.allowEmptyTournaments == null
       ? hasInitialRemoteSnapshot
       : Boolean(options.allowEmptyTournaments);
+    const allowRegistryDeletes = Boolean(options.allowRegistryDeletes);
     sanitized.updatedAt = Date.now();
     const mergedState = mergePendingState(baseState, sanitized, {
-      allowEmptyTournaments
+      allowEmptyTournaments,
+      allowRegistryDeletes
     });
     stateCache = mergedState;
     persistRemoteCache(mergedState);
     pendingState = mergedState;
-    pendingStatePolicy = { allowEmptyTournaments };
+    pendingStatePolicy = { allowEmptyTournaments, allowRegistryDeletes };
     if (hasInitialRemoteSnapshot) scheduleWrite(mergedState);
     return;
   }
@@ -172,6 +177,7 @@ function createTournament(name, challongeUrl = "") {
     challongeState: "",
     challongeSyncedAt: 0,
     challongeParticipants: [],
+    challongePlayerMap: [],
     challongeOpenMatches: [],
     players: [],
     arenas: [],
@@ -248,6 +254,7 @@ function normalizeTournament(tournament) {
     challongeState: tournament.challongeState || "",
     challongeSyncedAt: Number.isFinite(tournament.challongeSyncedAt) ? tournament.challongeSyncedAt : 0,
     challongeParticipants: normalizeChallongeParticipants(tournament.challongeParticipants),
+    challongePlayerMap: normalizeChallongeParticipants(tournament.challongePlayerMap),
     challongeOpenMatches: normalizeChallongeOpenMatches(tournament.challongeOpenMatches),
     players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
@@ -461,7 +468,7 @@ function initFirestoreSync() {
         syncedStateCache = sanitizeState(stateCache);
         persistRemoteCache(stateCache);
       } else {
-        pendingStatePolicy = { allowEmptyTournaments: true };
+        pendingStatePolicy = { allowEmptyTournaments: true, allowRegistryDeletes: false };
         scheduleWrite(stateCache);
       }
       if (pendingState) scheduleWrite(pendingState);
@@ -483,7 +490,7 @@ function initFirestoreSync() {
       scheduleWrite(mergedPending);
     } else {
       pendingState = null;
-      pendingStatePolicy = { allowEmptyTournaments: false };
+      pendingStatePolicy = { allowEmptyTournaments: false, allowRegistryDeletes: false };
     }
     emitRealtimeStatus({ online: true, connected: true });
     notifySubscribers();
