@@ -24,13 +24,13 @@ const WEB_PUSH_PUBLIC_KEY = String(process.env.WEB_PUSH_PUBLIC_KEY || "").trim()
 const WEB_PUSH_PRIVATE_KEY = String(process.env.WEB_PUSH_PRIVATE_KEY || "").trim();
 const WEB_PUSH_SUBJECT = String(process.env.WEB_PUSH_SUBJECT || "mailto:admin@example.com").trim();
 const CHALLONGE_API_KEY = String(process.env.CHALLONGE_API_KEY || "").trim();
+const PUSH_CONFIGURED = Boolean(WEB_PUSH_PUBLIC_KEY && WEB_PUSH_PRIVATE_KEY);
 
-if (!WEB_PUSH_PUBLIC_KEY || !WEB_PUSH_PRIVATE_KEY) {
-  console.error("Missing WEB_PUSH_PUBLIC_KEY or WEB_PUSH_PRIVATE_KEY env var");
-  process.exit(1);
+if (!PUSH_CONFIGURED) {
+  console.warn("Push notifications disabled: missing WEB_PUSH_PUBLIC_KEY or WEB_PUSH_PRIVATE_KEY env var");
+} else {
+  webpush.setVapidDetails(WEB_PUSH_SUBJECT, WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY);
 }
-
-webpush.setVapidDetails(WEB_PUSH_SUBJECT, WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY);
 
 function normalizeSubscriptions(list) {
   const seen = new Set();
@@ -145,6 +145,9 @@ function normalizeChallongeTournamentPayload(payload) {
 }
 
 app.get("/push-public-key", (req, res) => {
+  if (!PUSH_CONFIGURED) {
+    return res.status(503).json({ ok: false, error: "Push notifications disabled" });
+  }
   res.json({ ok: true, publicKey: WEB_PUSH_PUBLIC_KEY });
 });
 
@@ -204,6 +207,17 @@ app.post("/challonge/matches/:matchId/report", async (req, res) => {
 });
 
 app.post("/notify", async (req, res) => {
+  if (!PUSH_CONFIGURED) {
+    return res.json({
+      ok: true,
+      disabled: true,
+      requested: 0,
+      successCount: 0,
+      failureCount: 0,
+      invalidSubscriptions: [],
+      responses: []
+    });
+  }
   const { subscription, subscriptions, title, body, data } = req.body || {};
   const targetSubscriptions = normalizeSubscriptions(
     Array.isArray(subscriptions) ? subscriptions : [subscription]

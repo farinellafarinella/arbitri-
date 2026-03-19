@@ -4,6 +4,7 @@ const refereeProfileCard = document.getElementById("refereeProfileCard");
 const refereeNameInput = document.getElementById("refereeNameInput");
 const saveRefereeNameBtn = document.getElementById("saveRefereeNameBtn");
 const refereeProfileStatus = document.getElementById("refereeProfileStatus");
+const pushCard = document.getElementById("pushCard");
 const enablePushBtn = document.getElementById("enablePushBtn");
 const pushStatus = document.getElementById("pushStatus");
 const assignedArenaList = document.getElementById("assignedArenaList");
@@ -206,12 +207,22 @@ function pushSupported() {
   );
 }
 
+function pushFeatureEnabled() {
+  return false;
+}
+
 function vapidConfigured() {
-  return true;
+  return false;
 }
 
 function renderPushStatus() {
   if (!pushStatus || !enablePushBtn) return;
+  if (pushCard) pushCard.style.display = "none";
+  if (!pushFeatureEnabled()) {
+    pushStatus.textContent = "Notifiche push disattivate.";
+    enablePushBtn.disabled = true;
+    return;
+  }
   if (!pushSupported()) {
     pushStatus.textContent = "Questo dispositivo/browser non supporta le notifiche push web.";
     enablePushBtn.disabled = true;
@@ -244,7 +255,7 @@ function renderPushStatus() {
 }
 
 async function enablePushNotifications() {
-  if (!currentReferee || !pushSupported() || !vapidConfigured()) return;
+  if (!pushFeatureEnabled() || !currentReferee || !pushSupported() || !vapidConfigured()) return;
   try {
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {

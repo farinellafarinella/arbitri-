@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
     <title>Home Arbitro</title>
     <link rel="apple-touch-icon" href="icon.png" />
-    <link rel="manifest" href="manifest.json?v=20260319b" />
+    <link rel="manifest" href="manifest.json?v=20260319c" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -38,13 +38,13 @@
             <div id="refereeProfileStatus" class="muted">Usa qui il nome arbitro esatto usato su Challonge.</div>
           </div>
 
-          <div class="card">
+          <div id="pushCard" class="card">
             <h2>Notifiche Push</h2>
-            <div class="muted">Android: installa l'app dal browser e poi attiva le notifiche. iPhone: apri in Safari, fai "Aggiungi a Home" e poi attiva le notifiche dall'app installata.</div>
+            <div class="muted">Le notifiche push sono disattivate in questo progetto.</div>
             <div class="row">
               <button id="enablePushBtn">Attiva notifiche sul telefono</button>
             </div>
-            <div id="pushStatus" class="muted">Notifiche push non attive.</div>
+            <div id="pushStatus" class="muted">Notifiche push disattivate.</div>
           </div>
 
           <div class="card">
@@ -56,14 +56,14 @@
       </section>
     </div>
 
-    <script src="firebase-config.js?v=20260319b"></script>
+    <script src="firebase-config.js?v=20260319c"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="state.js?v=20260319b"></script>
-    <script src="status.js?v=20260319b"></script>
-    <script src="auth.js?v=20260319b"></script>
-    <script src="referee.js?v=20260319b"></script>
-    <script src="register-sw.js?v=20260319b"></script>
+    <script src="state.js?v=20260319c"></script>
+    <script src="status.js?v=20260319c"></script>
+    <script src="auth.js?v=20260319c"></script>
+    <script src="referee.js?v=20260319c"></script>
+    <script src="register-sw.js?v=20260319c"></script>
   </body>
 </html>
