@@ -87,6 +87,27 @@ function tournamentRegistryReferees() {
     .filter(Boolean);
 }
 
+function canLoadMatchIntoArena(arena) {
+  return Boolean(arena) && arena.status === "free" && !arena.match;
+}
+
+function assignRefereeToArena(refereeId, arenaId, options = {}) {
+  if (!tournament) return false;
+  const arena = (tournament.arenas || []).find((item) => item.id === arenaId);
+  const ref = (state.refereesRegistry || []).find((item) => item.id === refereeId);
+  if (!arena || !ref) return false;
+  const replacingOther = arena.refereeId && arena.refereeId !== ref.id;
+  if (replacingOther && !options.skipConfirm) {
+    const ok = window.confirm(`Sostituire ${arena.refereeName || "l'arbitro attuale"} con ${ref.name} in ${arena.name}?`);
+    if (!ok) return false;
+  }
+  arena.refereeId = ref.id;
+  arena.refereeName = ref.name;
+  saveState(state);
+  render();
+  return true;
+}
+
 function tournamentChallongeParticipantMap() {
   const map = new Map();
   if (!tournament || !Array.isArray(tournament.challongeParticipants)) return map;
@@ -258,10 +279,20 @@ function renderRefereeLineup() {
       const row = document.createElement("div");
       row.className = "list-row roster-item";
       const levelInfo = getRefereeLevelInfo(ref.exp || 0);
+      const arenaOptions = (tournament.arenas || []).map((arena) => {
+        const assignedText = arena.refereeName ? `Arbitro: ${arena.refereeName}` : "Senza arbitro";
+        return `<option value="${arena.id}">${arena.name} · ${statusLabel(arena.status)} · ${assignedText}</option>`;
+      }).join("");
       row.innerHTML = `
         <strong>${ref.name}</strong>
         <div class="muted">Riserva</div>
         <div class="muted">Lv ${levelInfo.level}</div>
+        <div class="reserve-assign-row">
+          <select class="reserve-arena-select" data-ref-id="${ref.id}">
+            ${arenaOptions || '<option value="">Nessuna arena disponibile</option>'}
+          </select>
+          <button type="button" class="assign-reserve-btn" data-ref-id="${ref.id}" ${arenaOptions ? "" : "disabled"}>Assegna arena</button>
+        </div>
       `;
       reserveRefereeList.appendChild(row);
     });
@@ -440,16 +471,43 @@ function renderChallongeMatches() {
     return;
   }
   const participantNameMap = tournamentChallongeParticipantMap();
+  const arenaTargets = (tournament.arenas || []).map((arena) => ({
+    id: arena.id,
+    name: arena.name,
+    status: arena.status,
+    refereeName: arena.refereeName || "",
+    ready: canLoadMatchIntoArena(arena)
+  }));
   matches.forEach((match) => {
     const names = resolveChallongeMatchNames(match, participantNameMap);
     const row = document.createElement("div");
     row.className = "list-row";
     const label = match.identifier ? `Match ${match.identifier}` : `Match ${match.id}`;
+    const arenaButtons = arenaTargets.length === 0
+      ? '<div class="muted">Nessuna arena creata.</div>'
+      : `<div class="match-arena-picker">${arenaTargets.map((arena) => `
+          <button
+            type="button"
+            class="match-arena-btn"
+            data-match-id="${match.id}"
+            data-arena-id="${arena.id}"
+            ${arena.ready ? "" : "disabled"}
+          >
+            <span class="light ${arena.status}" aria-hidden="true"></span>
+            <span>
+              <strong>${arena.name}</strong>
+              <span class="quick-arena-note">${arena.refereeName || "Senza arbitro"} · ${arena.ready ? "Libera" : statusLabel(arena.status)}</span>
+            </span>
+          </button>
+        `).join("")}</div>`;
     row.innerHTML = `
       <strong>${names.player1Name} vs ${names.player2Name}</strong>
       <div class="muted">${label} · Round ${match.round}</div>
-      <div class="row" style="margin-top:8px;">
-        <button class="load-challonge-match-btn" data-id="${match.id}" type="button">Carica su arena selezionata</button>
+      <div class="match-arena-actions">
+        <div class="row" style="margin-top:0;">
+          <button class="load-challonge-match-btn" data-id="${match.id}" type="button">Carica su arena selezionata</button>
+        </div>
+        ${arenaButtons}
       </div>
     `;
     challongeMatchList.appendChild(row);
@@ -519,12 +577,15 @@ async function syncChallongeTournament(options = {}) {
   }
 }
 
-function loadChallongeMatchIntoArena(matchId = "") {
+function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   if (!tournament) return;
-  const arenaId = matchArenaSelect && matchArenaSelect.value;
+  const arenaId = String(forcedArenaId || (matchArenaSelect && matchArenaSelect.value) || "").trim();
   if (!arenaId) {
     setChallongeStatus("Seleziona prima un'arena.", true);
     return;
+  }
+  if (matchArenaSelect) {
+    matchArenaSelect.value = arenaId;
   }
   const arena = tournament.arenas.find((item) => item.id === arenaId);
   if (!arena) {
@@ -790,13 +851,7 @@ assignBtn.addEventListener("click", () => {
   const arenaId = arenaSelect.value;
   const refereeId = refereeSelect.value;
   if (!arenaId || !refereeId || !tournament) return;
-  const arena = tournament.arenas.find((a) => a.id === arenaId);
-  const ref = (state.refereesRegistry || []).find((item) => item.id === refereeId);
-  if (!ref || !arena) return;
-  arena.refereeId = ref.id;
-  arena.refereeName = ref.name;
-  saveState(state);
-  render();
+  assignRefereeToArena(refereeId, arenaId, { skipConfirm: false });
 });
 
 if (addTournamentRefereeBtn) {
@@ -884,10 +939,40 @@ if (challongeMatchList) {
   challongeMatchList.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    const directArenaButton = target.closest(".match-arena-btn");
+    if (directArenaButton instanceof HTMLElement) {
+      const matchId = directArenaButton.dataset.matchId;
+      const arenaId = directArenaButton.dataset.arenaId;
+      if (!matchId || !arenaId) return;
+      loadChallongeMatchIntoArena(matchId, arenaId);
+      return;
+    }
     if (!target.classList.contains("load-challonge-match-btn")) return;
     const matchId = target.dataset.id;
     if (!matchId) return;
     loadChallongeMatchIntoArena(matchId);
+  });
+}
+
+if (reserveRefereeList) {
+  reserveRefereeList.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest(".assign-reserve-btn");
+    if (!(button instanceof HTMLElement)) return;
+    const refereeId = button.dataset.refId;
+    if (!refereeId) return;
+    const row = button.closest(".reserve-assign-row");
+    const select = row ? row.querySelector(".reserve-arena-select") : null;
+    const arenaId = select instanceof HTMLSelectElement ? String(select.value || "").trim() : "";
+    if (!arenaId) {
+      setRefereeLineupStatus("Seleziona prima un'arena per la riserva.", true);
+      return;
+    }
+    const assigned = assignRefereeToArena(refereeId, arenaId, { skipConfirm: false });
+    if (assigned) {
+      setRefereeLineupStatus("Arbitro di riserva assegnato all'arena selezionata.");
+    }
   });
 }
 
