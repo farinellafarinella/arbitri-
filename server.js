@@ -124,6 +124,116 @@ function unwrapChallongeList(payload, key) {
     .filter(Boolean);
 }
 
+function normalizePairKey(left, right) {
+  return [String(left || "").trim(), String(right || "").trim()].sort().join("::");
+}
+
+function buildRoundRobinSchedule(size) {
+  if (!Number.isInteger(size) || size < 2 || size % 2 !== 0) return [];
+  let order = Array.from({ length: size }, (_, index) => String(index + 1));
+  const rounds = [];
+  for (let roundIndex = 0; roundIndex < size - 1; roundIndex += 1) {
+    const pairs = [];
+    for (let index = 0; index < size / 2; index += 1) {
+      pairs.push(normalizePairKey(order[index], order[size - 1 - index]));
+    }
+    rounds.push(pairs.sort());
+    order = [order[0], order[order.length - 1], ...order.slice(1, -1)];
+  }
+  return rounds;
+}
+
+function buildObservedRounds(matches) {
+  const roundMap = new Map();
+  (Array.isArray(matches) ? matches : []).forEach((match) => {
+    const round = Number(match && match.round);
+    const player1Id = String(match && match.player1_id || "").trim();
+    const player2Id = String(match && match.player2_id || "").trim();
+    if (!Number.isFinite(round) || !player1Id || !player2Id) return;
+    const key = normalizePairKey(player1Id, player2Id);
+    if (!roundMap.has(round)) roundMap.set(round, []);
+    roundMap.get(round).push(key);
+  });
+  const orderedRounds = Array.from(roundMap.keys()).sort((left, right) => left - right);
+  return orderedRounds.map((round) => ({
+    round,
+    pairs: (roundMap.get(round) || []).sort()
+  }));
+}
+
+function *permute(list, start = 0) {
+  if (start >= list.length - 1) {
+    yield list.slice();
+    return;
+  }
+  for (let index = start; index < list.length; index += 1) {
+    [list[start], list[index]] = [list[index], list[start]];
+    yield* permute(list, start + 1);
+    [list[start], list[index]] = [list[index], list[start]];
+  }
+}
+
+function inferRoundRobinPlayerMap(participants, matches) {
+  const seededParticipants = (Array.isArray(participants) ? participants : [])
+    .filter((participant) => participant && participant.id && Number.isFinite(Number(participant.seed)))
+    .slice()
+    .sort((left, right) => Number(left.seed) - Number(right.seed));
+  if (seededParticipants.length < 2 || seededParticipants.length % 2 !== 0) return new Map();
+  if (seededParticipants.length > 12) return new Map();
+
+  const observedRounds = buildObservedRounds(matches);
+  const playerCount = seededParticipants.length;
+  if (observedRounds.length !== playerCount - 1) return new Map();
+  if (observedRounds.some((round) => round.pairs.length !== playerCount / 2)) return new Map();
+
+  const uniqueMatchPlayerIds = Array.from(new Set(
+    observedRounds.flatMap((round) => round.pairs.flatMap((pairKey) => pairKey.split("::")))
+  ));
+  if (uniqueMatchPlayerIds.length !== playerCount) return new Map();
+
+  const canonicalRounds = buildRoundRobinSchedule(playerCount);
+  if (canonicalRounds.length !== observedRounds.length) return new Map();
+
+  const round1Pairs = observedRounds[0].pairs.map((pairKey) => pairKey.split("::"));
+  const slots = Array.from({ length: playerCount / 2 }, (_, index) => [index, playerCount - 1 - index]);
+
+  for (const permutation of permute(round1Pairs.slice())) {
+    const orientationLimit = 2 ** permutation.length;
+    for (let mask = 0; mask < orientationLimit; mask += 1) {
+      const order = Array(playerCount).fill("");
+      permutation.forEach((pair, index) => {
+        let [left, right] = pair;
+        if ((mask >> index) & 1) {
+          [left, right] = [right, left];
+        }
+        const [leftSlot, rightSlot] = slots[index];
+        order[leftSlot] = left;
+        order[rightSlot] = right;
+      });
+      const candidateRounds = buildRoundRobinSchedule(playerCount).map((pairs) =>
+        pairs.map((pairKey) => {
+          const [leftSeed, rightSeed] = pairKey.split("::").map((value) => Number(value) - 1);
+          return normalizePairKey(order[leftSeed], order[rightSeed]);
+        }).sort()
+      );
+      const matchesSchedule = observedRounds.every((round, index) =>
+        JSON.stringify(round.pairs) === JSON.stringify(candidateRounds[index])
+      );
+      if (!matchesSchedule) continue;
+
+      const inferred = new Map();
+      order.forEach((matchPlayerId, index) => {
+        const participant = seededParticipants[index];
+        if (!participant || !matchPlayerId) return;
+        inferred.set(String(matchPlayerId), participant);
+      });
+      return inferred;
+    }
+  }
+
+  return new Map();
+}
+
 async function challongeRequest(pathname, options = {}) {
   if (!CHALLONGE_API_KEY) {
     const error = new Error("Missing CHALLONGE_API_KEY env var");
@@ -154,9 +264,7 @@ async function fetchChallongeTournamentBundle(tournamentRef) {
   const [tournamentPayload, participantsPayload, matchesPayload] = await Promise.all([
     challongeRequest(`/tournaments/${encodedRef}`),
     challongeRequest(`/tournaments/${encodedRef}/participants`),
-    challongeRequest(`/tournaments/${encodedRef}/matches`, {
-      query: { state: "open" }
-    })
+    challongeRequest(`/tournaments/${encodedRef}/matches`)
   ]);
   return {
     tournament: tournamentPayload && tournamentPayload.tournament ? tournamentPayload.tournament : {},
@@ -170,6 +278,7 @@ function normalizeChallongeTournamentPayload(bundle) {
   const participants = Array.isArray(bundle && bundle.participants) ? bundle.participants : [];
   const matches = Array.isArray(bundle && bundle.matches) ? bundle.matches : [];
   const participantById = new Map(participants.map((participant) => [String(participant.id), participant]));
+  const inferredPlayerMap = inferRoundRobinPlayerMap(participants, matches);
   const participantName = (participant, fallback = "") => pickDisplayText(
     participant && participant.name,
     participant && participant.display_name,
@@ -185,8 +294,8 @@ function normalizeChallongeTournamentPayload(bundle) {
   const openMatches = matches
     .filter((match) => match && match.state === "open" && match.player1_id && match.player2_id)
     .map((match) => {
-      const player1 = participantById.get(String(match.player1_id));
-      const player2 = participantById.get(String(match.player2_id));
+      const player1 = participantById.get(String(match.player1_id)) || inferredPlayerMap.get(String(match.player1_id));
+      const player2 = participantById.get(String(match.player2_id)) || inferredPlayerMap.get(String(match.player2_id));
       const player1Name = participantName(player1, match.player1_id ? `Partecipante ${match.player1_id}` : "");
       const player2Name = participantName(player2, match.player2_id ? `Partecipante ${match.player2_id}` : "");
       return {
