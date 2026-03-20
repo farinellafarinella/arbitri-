@@ -9,8 +9,8 @@
     <meta name="apple-mobile-web-app-title" content="Arbitri & Arene" />
     <title>Gestione Torneo</title>
     <link rel="apple-touch-icon" href="icon.png" />
-    <link rel="manifest" href="manifest.json?v=20260320c" />
-    <link rel="stylesheet" href="styles.css?v=20260320c" />
+    <link rel="manifest" href="manifest.json?v=20260320d" />
+    <link rel="stylesheet" href="styles.css?v=20260320d" />
   </head>
   <body class="admin-page">
     <div class="app">
@@ -84,6 +84,7 @@
               <button id="setMatchBtn">Carica</button>
             </div>
             <div id="matchMessage" class="muted"></div>
+            <div id="matchSwitchBanner" class="switch-banner" hidden></div>
             <div class="muted" style="margin-top:10px;">Arene disponibili adesso. Tocca una card per selezionarla.</div>
             <div id="matchArenaBoard" class="quick-arena-board"></div>
             <datalist id="playersList"></datalist>
@@ -96,9 +97,10 @@
               <input id="challongeUrlInput" placeholder="https://challonge.com/..." />
               <button id="saveChallongeUrlBtn" type="button">Salva link</button>
             </div>
-            <div class="row" style="margin-top:8px;">
+            <div class="row" style="margin-top:8px; flex-wrap:wrap;">
               <button id="syncChallongeBtn" type="button">Sincronizza Challonge</button>
               <button id="loadNextChallongeMatchBtn" type="button">Carica prossimo match</button>
+              <button id="autoAssignChallongeBtn" type="button">Pilota automatico</button>
             </div>
             <div id="challongeStatus" class="muted">Nessuna sincronizzazione eseguita.</div>
             <div id="challongeMatchList" class="list"></div>
@@ -145,15 +147,15 @@
 
     </div>
 
-    <script src="firebase-config.js?v=20260320c"></script>
+    <script src="firebase-config.js?v=20260320d"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-    <script src="state.js?v=20260320c"></script>
-    <script src="status.js?v=20260320c"></script>
-    <script src="auth.js?v=20260320c"></script>
-    <script src="admin.js?v=20260320c"></script>
-    <script src="kiosk-link.js?v=20260320c"></script>
-    <script src="register-sw.js?v=20260320c"></script>
+    <script src="state.js?v=20260320d"></script>
+    <script src="status.js?v=20260320d"></script>
+    <script src="auth.js?v=20260320d"></script>
+    <script src="admin.js?v=20260320d"></script>
+    <script src="kiosk-link.js?v=20260320d"></script>
+    <script src="register-sw.js?v=20260320d"></script>
   </body>
 </html>

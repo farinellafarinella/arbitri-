@@ -69,6 +69,43 @@ p {
   color: #facc15;
 }
 
+.switch-banner {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #6b4f00;
+  background: rgba(250, 204, 21, 0.12);
+  color: #fde68a;
+  display: grid;
+  gap: 4px;
+}
+
+.switch-banner[hidden] {
+  display: none;
+}
+
+.switch-banner.is-error {
+  border-color: #7f1d1d;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.switch-banner-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #facc15;
+}
+
+.switch-banner.is-error .switch-banner-title {
+  color: #fca5a5;
+}
+
+.switch-banner-copy {
+  line-height: 1.45;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

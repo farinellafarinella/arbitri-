@@ -21,10 +21,12 @@ const player1Input = document.getElementById("player1Input");
 const player2Input = document.getElementById("player2Input");
 const setMatchBtn = document.getElementById("setMatchBtn");
 const matchMessage = document.getElementById("matchMessage");
+const matchSwitchBanner = document.getElementById("matchSwitchBanner");
 const challongeUrlInput = document.getElementById("challongeUrlInput");
 const saveChallongeUrlBtn = document.getElementById("saveChallongeUrlBtn");
 const syncChallongeBtn = document.getElementById("syncChallongeBtn");
 const loadNextChallongeMatchBtn = document.getElementById("loadNextChallongeMatchBtn");
+const autoAssignChallongeBtn = document.getElementById("autoAssignChallongeBtn");
 const challongeStatus = document.getElementById("challongeStatus");
 const challongeMatchList = document.getElementById("challongeMatchList");
 const playersFile = document.getElementById("playersFile");
@@ -111,6 +113,8 @@ function challongeStateLabel(state) {
   if (value === "underway") return "in corso";
   if (value === "pending") return "in attesa";
   if (value === "complete") return "completato";
+  if (value === "group_stages_underway") return "svizzera in corso";
+  if (value === "group_stages_finalized") return "svizzera completata, top non avviata";
   if (value === "checking_in") return "check-in aperto";
   if (value === "checked_in") return "check-in chiuso";
   return value || "sconosciuto";
@@ -361,6 +365,59 @@ function refereePlayerLinkSuccessMessage(result) {
     return baseMessage;
   }
   return `${baseMessage} Cambio automatico: ${matchSwitchSummary(result.switchPlan)}.`;
+}
+
+function switchPreviewMessage(switchPlan = []) {
+  if (!Array.isArray(switchPlan) || switchPlan.length === 0) return "";
+  return `Se carichi questo match, cambierò l'arbitro in automatico: ${matchSwitchSummary(switchPlan)}.`;
+}
+
+function blockedSwitchPreviewMessage(unresolved = []) {
+  if (!Array.isArray(unresolved) || unresolved.length === 0) return "";
+  return `Per caricare questo match devo cambiare arbitro, ma ${unresolvedMatchSwitchMessage(unresolved)}.`;
+}
+
+function setSwitchBanner(element, text = "", options = {}) {
+  if (!element) return;
+  const message = String(text || "").trim();
+  if (!message) {
+    element.hidden = true;
+    element.classList.remove("is-error");
+    element.innerHTML = "";
+    return;
+  }
+  const title = String(options.title || "Cambio arbitro automatico").trim();
+  element.hidden = false;
+  element.classList.toggle("is-error", Boolean(options.isError));
+  element.innerHTML = `
+    <div class="switch-banner-title">${escapeHtml(title)}</div>
+    <div class="switch-banner-copy">${escapeHtml(message)}</div>
+  `;
+}
+
+function updateManualMatchSwitchBanner() {
+  if (!matchSwitchBanner) return;
+  const player1Name = String(player1Input && player1Input.value || "").trim();
+  const player2Name = String(player2Input && player2Input.value || "").trim();
+  if (!tournament || !player1Name || !player2Name) {
+    setSwitchBanner(matchSwitchBanner, "");
+    return;
+  }
+  const switchAnalysis = analyzeMatchRefereeSwitches([player1Name, player2Name]);
+  if (switchAnalysis.unresolved.length > 0) {
+    setSwitchBanner(matchSwitchBanner, blockedSwitchPreviewMessage(switchAnalysis.unresolved), {
+      title: "Cambio arbitro richiesto",
+      isError: true
+    });
+    return;
+  }
+  if (switchAnalysis.switchPlan.length > 0) {
+    setSwitchBanner(matchSwitchBanner, switchPreviewMessage(switchAnalysis.switchPlan), {
+      title: "Cambio arbitro automatico"
+    });
+    return;
+  }
+  setSwitchBanner(matchSwitchBanner, "");
 }
 
 function matchSwitchSummary(switchPlan = []) {
@@ -674,14 +731,9 @@ function renderMatchArenaBoard() {
   });
 }
 
-function generateRefereeLineup() {
+function assignAvailableRefereesToEmptyArenas() {
   if (!tournament) return;
   const availableRefs = tournamentRegistryReferees();
-  if (availableRefs.length === 0) {
-    setRefereeLineupStatus("Aggiungi prima arbitri al torneo.", true);
-    return;
-  }
-
   const usedIds = new Set();
   const usedNames = new Set();
   (tournament.arenas || []).forEach((arena) => {
@@ -709,21 +761,38 @@ function generateRefereeLineup() {
     assignedCount += 1;
   });
 
-  if (assignedCount === 0) {
-    const skippedText = skippedPlayingCount > 0
-      ? ` ${skippedPlayingCount} arbitri saltati perché stanno giocando.`
+  return {
+    availableRefs,
+    assignedCount,
+    skippedPlayingCount,
+    remainingEmptyCount: (tournament.arenas || []).filter((arena) => !arena.refereeId && !arena.refereeName).length
+  };
+}
+
+function generateRefereeLineup() {
+  if (!tournament) return { assignedCount: 0, skippedPlayingCount: 0, remainingEmptyCount: 0 };
+  const assignment = assignAvailableRefereesToEmptyArenas();
+  if (!assignment || assignment.availableRefs.length === 0) {
+    setRefereeLineupStatus("Aggiungi prima arbitri al torneo.", true);
+    return { assignedCount: 0, skippedPlayingCount: 0, remainingEmptyCount: 0 };
+  }
+
+  if (assignment.assignedCount === 0) {
+    const skippedText = assignment.skippedPlayingCount > 0
+      ? ` ${assignment.skippedPlayingCount} arbitri saltati perché stanno giocando.`
       : "";
     setRefereeLineupStatus(`Nessuna arena libera da riempire oppure nessuna riserva disponibile.${skippedText}`, true);
     renderRefereeLineup();
-    return;
+    return assignment;
   }
 
   saveState(state);
   render();
-  const skippedText = skippedPlayingCount > 0
-    ? ` ${skippedPlayingCount} riserve saltate perché stanno giocando.`
+  const skippedText = assignment.skippedPlayingCount > 0
+    ? ` ${assignment.skippedPlayingCount} riserve saltate perché stanno giocando.`
     : "";
-  setRefereeLineupStatus(`Lista aggiornata: ${assignedCount} arbitri assegnati alle arene libere.${skippedText}`);
+  setRefereeLineupStatus(`Lista aggiornata: ${assignment.assignedCount} arbitri assegnati alle arene libere.${skippedText}`);
+  return assignment;
 }
 
 function challongePlaceholderName(name, participantId = "") {
@@ -815,9 +884,13 @@ function renderChallongeMatches() {
   if (matches.length === 0) {
     const empty = document.createElement("div");
     empty.className = "muted";
-    empty.textContent = tournament.challongeSyncedAt
-      ? "Nessun match aperto disponibile da Challonge."
-      : "Sincronizza Challonge per vedere i match aperti.";
+    if (!tournament.challongeSyncedAt) {
+      empty.textContent = "Sincronizza Challonge per vedere i match aperti.";
+    } else if (String(tournament.challongeState || "").trim().toLowerCase() === "group_stages_finalized") {
+      empty.textContent = "La top è stata generata, ma la fase finale non è ancora partita su Challonge. Avviala su Challonge e poi risincronizza.";
+    } else {
+      empty.textContent = "Nessun match aperto disponibile da Challonge.";
+    }
     challongeMatchList.appendChild(empty);
     return;
   }
@@ -834,8 +907,21 @@ function renderChallongeMatches() {
     const names = resolveChallongeMatchNames(match, participantNameMap);
     const switchAnalysis = analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]);
     const blockedReason = unresolvedMatchSwitchMessage(switchAnalysis.unresolved);
-    const autoSwitchText = switchAnalysis.switchPlan.length > 0 && !blockedReason
-      ? `Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`
+    const blockedBanner = blockedReason
+      ? `
+        <div class="switch-banner is-error">
+          <div class="switch-banner-title">Cambio arbitro richiesto</div>
+          <div class="switch-banner-copy">${escapeHtml(blockedSwitchPreviewMessage(switchAnalysis.unresolved))}</div>
+        </div>
+      `
+      : "";
+    const autoSwitchBanner = switchAnalysis.switchPlan.length > 0 && !blockedReason
+      ? `
+        <div class="switch-banner">
+          <div class="switch-banner-title">Cambio arbitro automatico</div>
+          <div class="switch-banner-copy">${escapeHtml(switchPreviewMessage(switchAnalysis.switchPlan))}</div>
+        </div>
+      `
       : "";
     const selectedArenaId = String(selectedChallongeArenaByMatch[String(match.id)] || "").trim();
     const selectedArena = arenaTargets.find((arena) => arena.id === selectedArenaId) || null;
@@ -869,8 +955,8 @@ function renderChallongeMatches() {
         <div class="row" style="margin-top:0;">
           <button class="load-challonge-match-btn" data-id="${match.id}" type="button" ${selectedArena && selectedArena.ready && !blockedReason ? "" : "disabled"}>Assegna match a questa arena</button>
         </div>
-        ${blockedReason ? `<div class="error">${blockedReason}</div>` : ""}
-        ${autoSwitchText ? `<div class="muted">${autoSwitchText}</div>` : ""}
+        ${blockedBanner}
+        ${autoSwitchBanner}
         <div class="muted">${selectedArenaText}</div>
         ${arenaButtons}
       </div>
@@ -942,7 +1028,10 @@ async function syncChallongeTournament(options = {}) {
       const challongeState = challongeStateLabel(payload.state);
       const challongeRef = String(payload.tournamentRef || "").trim();
       const refText = challongeRef ? ` Ref: ${challongeRef}.` : "";
-      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti. Torneo: ${challongeName}. Stato: ${challongeState}.${refText}`);
+      const finalStageHint = String(payload.state || "").trim().toLowerCase() === "group_stages_finalized"
+        ? " La top è pronta ma la fase finale non è ancora avviata su Challonge."
+        : "";
+      setChallongeStatus(`Challonge sincronizzato: ${tournament.challongeOpenMatches.length} match aperti. Torneo: ${challongeName}. Stato: ${challongeState}.${refText}${finalStageHint}`);
     }
     return true;
   } catch (error) {
@@ -950,6 +1039,118 @@ async function syncChallongeTournament(options = {}) {
     setChallongeStatus("Errore di rete durante la sincronizzazione Challonge.", true);
     return false;
   }
+}
+
+function prepareChallongeMatchAssignment(selectedMatch) {
+  if (!selectedMatch) {
+    return { ok: false, error: "Nessun match Challonge disponibile da caricare." };
+  }
+  const names = resolveChallongeMatchNames(selectedMatch);
+  const switchAnalysis = analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]);
+  if (switchAnalysis.unresolved.length > 0) {
+    return {
+      ok: false,
+      error: unresolvedMatchSwitchMessage(switchAnalysis.unresolved)
+    };
+  }
+  return {
+    ok: true,
+    names,
+    switchPlan: switchAnalysis.switchPlan,
+    match: selectedMatch
+  };
+}
+
+function applyPreparedChallongeMatchToArena(arena, preparedMatch) {
+  if (!arena || !preparedMatch || !preparedMatch.ok) return { ok: false };
+  if (preparedMatch.switchPlan.length > 0) {
+    applyMatchRefereeSwitchPlan(preparedMatch.switchPlan);
+  }
+  const selectedMatch = preparedMatch.match;
+  arena.match = {
+    p1: preparedMatch.names.player1Name,
+    p2: preparedMatch.names.player2Name,
+    source: "challonge",
+    challongeMatchId: String(selectedMatch.id),
+    challongePlayer1Id: String(selectedMatch.player1Id),
+    challongePlayer2Id: String(selectedMatch.player2Id),
+    challongeIdentifier: selectedMatch.identifier || "",
+    challongeRound: selectedMatch.round || 0
+  };
+  arena.selectedWinner = "";
+  arena.selectedWinnerId = "";
+  arena.winnerCandidate = "";
+  arena.winnerCandidateId = "";
+  arena.coinTossResult = "";
+  return {
+    ok: true,
+    names: preparedMatch.names,
+    switchPlan: preparedMatch.switchPlan
+  };
+}
+
+function autoAssignChallongeMatches() {
+  if (!tournament || !tournament.challongeUrl) {
+    setChallongeStatus("Collega prima un torneo Challonge.", true);
+    return;
+  }
+  const refereeAssignment = assignAvailableRefereesToEmptyArenas() || {
+    availableRefs: [],
+    assignedCount: 0,
+    skippedPlayingCount: 0,
+    remainingEmptyCount: 0
+  };
+  const tournamentState = String(tournament.challongeState || "").trim().toLowerCase();
+  if (tournamentState === "group_stages_finalized") {
+    setChallongeStatus("La top è stata generata, ma la fase finale non è ancora partita su Challonge. Avviala su Challonge e poi usa il pilota automatico.", true);
+    return;
+  }
+
+  let assignedMatches = 0;
+  let automaticSwitches = 0;
+  let skippedWithoutReferee = 0;
+
+  while (true) {
+    const nextArena = (tournament.arenas || []).find((arena) =>
+      canLoadMatchIntoArena(arena) && Boolean(arena.refereeId || arena.refereeName)
+    );
+    if (!nextArena) break;
+    const nextPreparedMatch = availableChallongeMatches()
+      .map((match) => prepareChallongeMatchAssignment(match))
+      .find((result) => result.ok);
+    if (!nextPreparedMatch) break;
+    const applied = applyPreparedChallongeMatchToArena(nextArena, nextPreparedMatch);
+    if (!applied.ok) break;
+    assignedMatches += 1;
+    automaticSwitches += nextPreparedMatch.switchPlan.length;
+    delete selectedChallongeArenaByMatch[String(nextPreparedMatch.match.id)];
+  }
+
+  skippedWithoutReferee = (tournament.arenas || []).filter((arena) =>
+    canLoadMatchIntoArena(arena) && !arena.refereeId && !arena.refereeName
+  ).length;
+
+  if (assignedMatches === 0 && refereeAssignment.assignedCount === 0) {
+    const noMatchesText = availableChallongeMatches().length === 0
+      ? "Nessun match Challonge aperto da assegnare."
+      : "Nessun match Challonge caricabile automaticamente con gli arbitri disponibili.";
+    setChallongeStatus(noMatchesText, true);
+    render();
+    return;
+  }
+
+  saveState(state);
+  render();
+  const switchText = automaticSwitches > 0
+    ? ` Cambio automatico arbitri: ${automaticSwitches}.`
+    : "";
+  const refereeText = refereeAssignment.assignedCount > 0
+    ? ` Arbitri assegnati automaticamente: ${refereeAssignment.assignedCount}.`
+    : "";
+  const skippedRefText = skippedWithoutReferee > 0
+    ? ` Arene rimaste senza arbitro: ${skippedWithoutReferee}.`
+    : "";
+  setChallongeStatus(`Pilota automatico: ${assignedMatches} match Challonge assegnati.${refereeText}${switchText}${skippedRefText}`);
 }
 
 function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
@@ -985,39 +1186,21 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
       : "Nessun match Challonge caricabile: i prossimi match richiedono una riserva libera per sostituire arbitri-giocatori.", true);
     return;
   }
-  const names = resolveChallongeMatchNames(selectedMatch);
-  const switchAnalysis = analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]);
-  if (switchAnalysis.unresolved.length > 0) {
-    setChallongeStatus(unresolvedMatchSwitchMessage(switchAnalysis.unresolved), true);
+  const preparedMatch = prepareChallongeMatchAssignment(selectedMatch);
+  if (!preparedMatch.ok) {
+    setChallongeStatus(preparedMatch.error || "Impossibile preparare il match Challonge.", true);
     return;
   }
-  if (switchAnalysis.switchPlan.length > 0) {
-    applyMatchRefereeSwitchPlan(switchAnalysis.switchPlan);
-  }
-  arena.match = {
-    p1: names.player1Name,
-    p2: names.player2Name,
-    source: "challonge",
-    challongeMatchId: String(selectedMatch.id),
-    challongePlayer1Id: String(selectedMatch.player1Id),
-    challongePlayer2Id: String(selectedMatch.player2Id),
-    challongeIdentifier: selectedMatch.identifier || "",
-    challongeRound: selectedMatch.round || 0
-  };
-  arena.selectedWinner = "";
-  arena.selectedWinnerId = "";
-  arena.winnerCandidate = "";
-  arena.winnerCandidateId = "";
-  arena.coinTossResult = "";
+  applyPreparedChallongeMatchToArena(arena, preparedMatch);
   if (matchId) {
     delete selectedChallongeArenaByMatch[String(matchId)];
   }
   saveState(state);
   render();
-  const switchText = switchAnalysis.switchPlan.length > 0
-    ? ` Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`
+  const switchText = preparedMatch.switchPlan.length > 0
+    ? ` Cambio automatico: ${matchSwitchSummary(preparedMatch.switchPlan)}.`
     : "";
-  setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.${switchText}`);
+  setChallongeStatus(`Match caricato su ${arena.name}: ${preparedMatch.names.player1Name} vs ${preparedMatch.names.player2Name}.${switchText}`);
 }
 
 async function reportChallongeResult(matchData, winnerChoice = {}) {
@@ -1174,6 +1357,7 @@ function render() {
   renderPlayers();
   renderChallongeMatches();
   renderMatchArenaBoard();
+  updateManualMatchSwitchBanner();
   if (challongeStatus && (!challongeStatus.textContent || challongeStatus.textContent === "Nessuna sincronizzazione eseguita.")) {
     if (!tournament.challongeUrl) {
       setChallongeStatus("Nessun link Challonge collegato.");
@@ -1327,20 +1511,31 @@ setMatchBtn.addEventListener("click", () => {
   arena.winnerCandidate = "";
   arena.winnerCandidateId = "";
   arena.coinTossResult = "";
+  player1Input.value = "";
+  player2Input.value = "";
   saveState(state);
   render();
+  updateManualMatchSwitchBanner();
   if (switchAnalysis.switchPlan.length > 0) {
     matchMessage.textContent = `Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`;
     matchMessage.classList.remove("error");
   }
-  player1Input.value = "";
-  player2Input.value = "";
 });
 
 if (matchArenaSelect) {
   matchArenaSelect.addEventListener("change", () => {
     renderMatchArenaBoard();
   });
+}
+
+if (player1Input) {
+  player1Input.addEventListener("input", updateManualMatchSwitchBanner);
+  player1Input.addEventListener("change", updateManualMatchSwitchBanner);
+}
+
+if (player2Input) {
+  player2Input.addEventListener("input", updateManualMatchSwitchBanner);
+  player2Input.addEventListener("change", updateManualMatchSwitchBanner);
 }
 
 if (saveChallongeUrlBtn) {
@@ -1365,6 +1560,12 @@ if (syncChallongeBtn) {
 if (loadNextChallongeMatchBtn) {
   loadNextChallongeMatchBtn.addEventListener("click", () => {
     loadChallongeMatchIntoArena();
+  });
+}
+
+if (autoAssignChallongeBtn) {
+  autoAssignChallongeBtn.addEventListener("click", () => {
+    autoAssignChallongeMatches();
   });
 }
 
