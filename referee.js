@@ -16,6 +16,8 @@ let currentUser = null;
 let currentReferee = null;
 let redirectedArenaKey = "";
 let pushPublicKeyPromise = null;
+let pushAvailabilityChecked = false;
+let pushAvailabilityError = "";
 let profileStatusMessage = "";
 let profileStatusIsError = false;
 
@@ -237,16 +239,43 @@ function pushSupported() {
 }
 
 function pushFeatureEnabled() {
-  return false;
+  return true;
 }
 
 function vapidConfigured() {
-  return false;
+  return pushAvailabilityChecked && !pushAvailabilityError;
+}
+
+async function refreshPushAvailability() {
+  if (!pushFeatureEnabled()) {
+    pushAvailabilityChecked = true;
+    pushAvailabilityError = "Notifiche push disattivate.";
+    renderPushStatus();
+    return;
+  }
+  if (!pushSupported()) {
+    pushAvailabilityChecked = true;
+    pushAvailabilityError = "Questo dispositivo/browser non supporta le notifiche push web.";
+    renderPushStatus();
+    return;
+  }
+  pushAvailabilityChecked = false;
+  pushAvailabilityError = "";
+  renderPushStatus();
+  try {
+    await getPushPublicKey();
+    pushAvailabilityChecked = true;
+    pushAvailabilityError = "";
+  } catch (error) {
+    pushAvailabilityChecked = true;
+    pushAvailabilityError = String(error && error.message ? error.message : "Configurazione notifiche non disponibile.");
+  }
+  renderPushStatus();
 }
 
 function renderPushStatus() {
   if (!pushStatus || !enablePushBtn) return;
-  if (pushCard) pushCard.style.display = "none";
+  if (pushCard) pushCard.style.display = "";
   if (!pushFeatureEnabled()) {
     pushStatus.textContent = "Notifiche push disattivate.";
     enablePushBtn.disabled = true;
@@ -257,8 +286,13 @@ function renderPushStatus() {
     enablePushBtn.disabled = true;
     return;
   }
+  if (!pushAvailabilityChecked) {
+    pushStatus.textContent = "Controllo configurazione notifiche in corso...";
+    enablePushBtn.disabled = true;
+    return;
+  }
   if (!vapidConfigured()) {
-    pushStatus.textContent = "Manca la VAPID key web in configurazione.";
+    pushStatus.textContent = pushAvailabilityError || "Configurazione notifiche non disponibile.";
     enablePushBtn.disabled = true;
     return;
   }
@@ -325,6 +359,7 @@ async function enablePushNotifications() {
     await sendPushTest(normalizedSubscription);
     pushStatus.textContent = "Notifiche attive. Test inviato.";
     window.setTimeout(() => {
+      refreshPushAvailability().catch(() => {});
       renderPushStatus();
     }, 2500);
   } catch (error) {
@@ -416,6 +451,7 @@ function syncReferee(user) {
     return;
   }
   currentReferee = upsertRefereeAccountProfile(user) || currentReferee;
+  refreshPushAvailability().catch(() => {});
   renderRefereeHome();
 }
 
@@ -465,4 +501,5 @@ if (refereeNameInput) {
 }
 
 setupForegroundPushListener();
+refreshPushAvailability().catch(() => {});
 renderRefereeHome();

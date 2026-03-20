@@ -811,7 +811,6 @@ function render() {
       <div>
         <strong>${arena.name}</strong>
         <div class="muted">Arbitro: <span class="referee-name">${arena.refereeName || "—"}</span></div>
-        <div class="muted">Sorteggio: <span class="winner-name">${arena.coinTossResult || "—"}</span></div>
         <div class="muted">Vincitore: <span class="winner-name">${winnerDisplay || (arena.status === "standby" ? "Da confermare" : "—")}</span></div>
         <div class="muted">Match: ${arena.match ? `<span class="match-players">${matchNames.player1Name} vs ${matchNames.player2Name}</span>` : "—"}</div>
       </div>
