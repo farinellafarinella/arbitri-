@@ -182,7 +182,8 @@ function createTournament(name, challongeUrl = "") {
     players: [],
     arenas: [],
     referees: [],
-    refereeIds: []
+    refereeIds: [],
+    refereePlayerLinks: []
   };
 }
 
@@ -262,7 +263,8 @@ function normalizeTournament(tournament) {
     players: Array.isArray(tournament.players) ? tournament.players : [],
     arenas: (tournament.arenas || []).map(normalizeArena),
     referees: tournament.referees || [],
-    refereeIds: Array.isArray(tournament.refereeIds) ? tournament.refereeIds : []
+    refereeIds: Array.isArray(tournament.refereeIds) ? tournament.refereeIds : [],
+    refereePlayerLinks: normalizeRefereePlayerLinks(tournament.refereePlayerLinks)
   };
 }
 
@@ -295,6 +297,22 @@ function normalizeChallongeParticipants(list) {
     seed: Number.isFinite(participant && participant.seed) ? participant.seed : 0,
     name: normalizePersonName(participant && participant.name, "")
   })).filter((participant) => participant.id && participant.name);
+}
+
+function normalizeRefereePlayerLinks(list) {
+  const source = Array.isArray(list)
+    ? list
+    : (list && typeof list === "object")
+      ? Object.keys(list).map((refereeId) => ({ refereeId, playerName: list[refereeId] }))
+      : [];
+  const merged = new Map();
+  source.forEach((link) => {
+    const refereeId = String(link && link.refereeId || "").trim();
+    const playerName = normalizePersonName(link && link.playerName, "");
+    if (!refereeId || !playerName) return;
+    merged.set(refereeId, { refereeId, playerName });
+  });
+  return Array.from(merged.values());
 }
 
 function normalizeRefereeRegistry(list) {

@@ -534,6 +534,17 @@ button:disabled {
   padding: 12px;
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-head h2 {
+  margin: 0;
+}
+
 .roster-item {
   display: grid;
   gap: 4px;
@@ -641,6 +652,18 @@ button:disabled {
 }
 
 .reserve-assign-row select {
+  width: 100%;
+  min-width: 0;
+}
+
+.ref-player-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ref-player-link-row input {
   width: 100%;
   min-width: 0;
 }
@@ -819,6 +842,10 @@ button:disabled {
   .row select,
   button {
     width: 100%;
+  }
+
+  .ref-player-link-row {
+    grid-template-columns: 1fr;
   }
 
   .arena-page .app {

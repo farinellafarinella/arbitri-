@@ -6,6 +6,8 @@ const tournamentRefereeSelect = document.getElementById("tournamentRefereeSelect
 const addTournamentRefereeBtn = document.getElementById("addTournamentRefereeBtn");
 const tournamentRefereeList = document.getElementById("tournamentRefereeList");
 const tournamentRefereeMessage = document.getElementById("tournamentRefereeMessage");
+const toggleRefereePanelBtn = document.getElementById("toggleRefereePanelBtn");
+const refereePanelBody = document.getElementById("refereePanelBody");
 const generateRefereeLineupBtn = document.getElementById("generateRefereeLineupBtn");
 const refereeLineupStatus = document.getElementById("refereeLineupStatus");
 const activeRefereeList = document.getElementById("activeRefereeList");
@@ -57,6 +59,53 @@ function challongeReportEndpoint(matchId) {
   return `${challongeApiBase()}/challonge/matches/${encodeURIComponent(matchId)}/report`;
 }
 
+function normalizeNameKey(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function refereePanelStorageKey() {
+  return `admin_referee_panel_hidden:${tournamentId || "default"}`;
+}
+
+function setTournamentRefereeMessage(text = "", isError = false) {
+  if (!tournamentRefereeMessage) return;
+  tournamentRefereeMessage.textContent = text;
+  tournamentRefereeMessage.classList.toggle("error", Boolean(text) && isError);
+}
+
+function setRefereePanelCollapsed(collapsed) {
+  if (!refereePanelBody || !toggleRefereePanelBtn) return;
+  refereePanelBody.hidden = collapsed;
+  toggleRefereePanelBtn.textContent = collapsed ? "Mostra" : "Nascondi";
+  toggleRefereePanelBtn.setAttribute("aria-expanded", String(!collapsed));
+  try {
+    localStorage.setItem(refereePanelStorageKey(), collapsed ? "1" : "0");
+  } catch {
+    // ignore local storage failures
+  }
+}
+
+function restoreRefereePanelState() {
+  if (!refereePanelBody || !toggleRefereePanelBtn) return;
+  let collapsed = false;
+  try {
+    collapsed = localStorage.getItem(refereePanelStorageKey()) === "1";
+  } catch {
+    collapsed = false;
+  }
+  setRefereePanelCollapsed(collapsed);
+}
+
 function challongeStateLabel(state) {
   const value = String(state || "").trim().toLowerCase();
   if (value === "underway") return "in corso";
@@ -88,6 +137,251 @@ function tournamentRegistryReferees() {
     .filter(Boolean);
 }
 
+function tournamentRefereePlayerLinks() {
+  return Array.isArray(tournament && tournament.refereePlayerLinks) ? tournament.refereePlayerLinks : [];
+}
+
+function tournamentPlayerNameMap() {
+  const map = new Map();
+  if (!tournament) return map;
+  const names = [
+    ...(Array.isArray(tournament.players) ? tournament.players : []),
+    ...(Array.isArray(tournament.challongeParticipants) ? tournament.challongeParticipants.map((participant) => participant && participant.name) : []),
+    ...(Array.isArray(tournament.challongePlayerMap) ? tournament.challongePlayerMap.map((participant) => participant && participant.name) : [])
+  ];
+  names.forEach((entry) => {
+    const name = String(entry || "").trim();
+    const key = normalizeNameKey(name);
+    if (!key || map.has(key)) return;
+    map.set(key, name);
+  });
+  return map;
+}
+
+function resolveTournamentPlayerName(playerName) {
+  const playerKey = normalizeNameKey(playerName);
+  if (!playerKey) return "";
+  return tournamentPlayerNameMap().get(playerKey) || "";
+}
+
+function linkedPlayerNameForReferee(refereeId) {
+  const refId = String(refereeId || "").trim();
+  if (!refId) return "";
+  const link = tournamentRefereePlayerLinks().find((item) => String(item && item.refereeId || "").trim() === refId);
+  return String(link && link.playerName || "").trim();
+}
+
+function findTournamentReferee(refereeId) {
+  const refId = String(refereeId || "").trim();
+  if (!refId) return null;
+  return tournamentRegistryReferees().find((ref) => ref.id === refId)
+    || (state.refereesRegistry || []).find((ref) => ref.id === refId)
+    || null;
+}
+
+function updateRefereePlayerLink(refereeId, playerName) {
+  if (!tournament) return { ok: false };
+  const refId = String(refereeId || "").trim();
+  if (!refId) return { ok: false };
+  if (!Array.isArray(tournament.refereePlayerLinks)) tournament.refereePlayerLinks = [];
+  const nextName = String(playerName || "").trim();
+  const currentIndex = tournament.refereePlayerLinks.findIndex((item) => String(item && item.refereeId || "").trim() === refId);
+  if (!nextName) {
+    if (currentIndex !== -1) {
+      tournament.refereePlayerLinks.splice(currentIndex, 1);
+    }
+    return { ok: true, cleared: true, switchPlan: [] };
+  }
+  const resolvedPlayerName = resolveTournamentPlayerName(nextName);
+  if (!resolvedPlayerName) {
+    return {
+      ok: false,
+      error: "Giocatore non trovato nel torneo. Importa i giocatori o sincronizza Challonge prima di collegarlo a un arbitro."
+    };
+  }
+  const duplicateLink = tournament.refereePlayerLinks.find((item) =>
+    String(item && item.refereeId || "").trim() !== refId
+    && normalizeNameKey(item && item.playerName) === normalizeNameKey(resolvedPlayerName)
+  );
+  if (duplicateLink) {
+    return {
+      ok: false,
+      error: `Giocatore già collegato a ${findTournamentReferee(duplicateLink.refereeId)?.name || "un altro arbitro"}.`
+    };
+  }
+  const conflictResolution = resolveImmediateRefereePlayerConflict(refId, resolvedPlayerName);
+  if (!conflictResolution.ok) {
+    return conflictResolution;
+  }
+  const nextLink = { refereeId: refId, playerName: resolvedPlayerName };
+  if (currentIndex === -1) {
+    tournament.refereePlayerLinks.push(nextLink);
+  } else {
+    tournament.refereePlayerLinks[currentIndex] = nextLink;
+  }
+  return {
+    ok: true,
+    cleared: false,
+    playerName: resolvedPlayerName,
+    switchPlan: conflictResolution.switchPlan || []
+  };
+}
+
+function assignedArenaForReferee(refereeId) {
+  const refId = String(refereeId || "").trim();
+  if (!refId || !tournament) return null;
+  return (tournament.arenas || []).find((arena) => String(arena && arena.refereeId || "").trim() === refId) || null;
+}
+
+function playerNamesForArenaMatch(arena) {
+  const match = arena && arena.match;
+  if (!match) return [];
+  return [String(match.p1 || "").trim(), String(match.p2 || "").trim()].filter(Boolean);
+}
+
+function findArenaWithPlayerName(playerName) {
+  const playerKey = normalizeNameKey(playerName);
+  if (!playerKey || !tournament) return null;
+  return (tournament.arenas || []).find((arena) =>
+    playerNamesForArenaMatch(arena).some((name) => normalizeNameKey(name) === playerKey)
+  ) || null;
+}
+
+function refereePlayingConflict(refereeId) {
+  const playerName = linkedPlayerNameForReferee(refereeId);
+  const playerKey = normalizeNameKey(playerName);
+  if (!playerKey || !tournament) return null;
+  const arena = findArenaWithPlayerName(playerName);
+  if (!arena || !arena.match) return null;
+  return {
+    playerName,
+    arenaName: arena.name,
+    matchLabel: `${arena.match.p1} vs ${arena.match.p2}`
+  };
+}
+
+function linkedRefereeForPlayerName(playerName) {
+  const playerKey = normalizeNameKey(playerName);
+  if (!playerKey) return null;
+  const link = tournamentRefereePlayerLinks().find((item) => normalizeNameKey(item && item.playerName) === playerKey);
+  if (!link) return null;
+  const referee = findTournamentReferee(link.refereeId);
+  if (!referee) return null;
+  return {
+    playerName: String(link.playerName || playerName).trim(),
+    referee
+  };
+}
+
+function freeReserveReferees(excludedRefereeIds = new Set(), excludedPlayerKeys = new Set()) {
+  const assignedRefereeIds = new Set((tournament && tournament.arenas || [])
+    .map((arena) => String(arena && arena.refereeId || "").trim())
+    .filter(Boolean));
+  return tournamentRegistryReferees().filter((ref) => {
+    const refId = String(ref.id || "").trim();
+    if (!refId || assignedRefereeIds.has(refId) || excludedRefereeIds.has(refId)) return false;
+    const linkedPlayerKey = normalizeNameKey(linkedPlayerNameForReferee(refId));
+    if (linkedPlayerKey && excludedPlayerKeys.has(linkedPlayerKey)) return false;
+    return !refereePlayingConflict(refId);
+  });
+}
+
+function analyzeMatchRefereeSwitches(playerNames = []) {
+  const requiredSwitches = [];
+  const seen = new Set();
+  const relevantPlayerKeys = new Set((Array.isArray(playerNames) ? playerNames : []).map((name) => normalizeNameKey(name)).filter(Boolean));
+  (Array.isArray(playerNames) ? playerNames : []).forEach((playerName) => {
+    const linked = linkedRefereeForPlayerName(playerName);
+    if (!linked) return;
+    const arena = assignedArenaForReferee(linked.referee.id);
+    if (!arena) return;
+    const key = `${linked.referee.id}:${arena.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    requiredSwitches.push({
+      playerName: linked.playerName,
+      referee: linked.referee,
+      arena
+    });
+  });
+  if (requiredSwitches.length === 0) {
+    return { switchPlan: [], unresolved: [] };
+  }
+  const excludedRefereeIds = new Set(requiredSwitches.map((item) => item.referee.id));
+  const reservePool = freeReserveReferees(excludedRefereeIds, relevantPlayerKeys).slice();
+  const switchPlan = [];
+  const unresolved = [];
+  requiredSwitches.forEach((item) => {
+    const replacement = reservePool.shift();
+    if (!replacement) {
+      unresolved.push(item);
+      return;
+    }
+    switchPlan.push({ ...item, replacement });
+  });
+  return { switchPlan, unresolved };
+}
+
+function resolveImmediateRefereePlayerConflict(refereeId, playerName) {
+  const refId = String(refereeId || "").trim();
+  const resolvedPlayerName = String(playerName || "").trim();
+  if (!refId || !resolvedPlayerName) {
+    return { ok: true, switchPlan: [] };
+  }
+  const referee = findTournamentReferee(refId);
+  const assignedArena = assignedArenaForReferee(refId);
+  const playingArena = findArenaWithPlayerName(resolvedPlayerName);
+  if (!referee || !assignedArena || !playingArena) {
+    return { ok: true, switchPlan: [] };
+  }
+  const replacement = freeReserveReferees(
+    new Set([refId]),
+    new Set([normalizeNameKey(resolvedPlayerName)])
+  )[0];
+  if (!replacement) {
+    return {
+      ok: false,
+      error: `${resolvedPlayerName} sta già giocando su ${playingArena.name} e ${referee.name} è assegnato a ${assignedArena.name}. Serve una riserva libera per completare il collegamento.`
+    };
+  }
+  const switchPlan = [{
+    playerName: resolvedPlayerName,
+    referee,
+    arena: assignedArena,
+    replacement
+  }];
+  applyMatchRefereeSwitchPlan(switchPlan);
+  return { ok: true, switchPlan };
+}
+
+function refereePlayerLinkSuccessMessage(result) {
+  if (!result || !result.ok) return "";
+  const baseMessage = result.cleared ? "Giocatore scollegato." : "Giocatore collegato salvato.";
+  if (!Array.isArray(result.switchPlan) || result.switchPlan.length === 0) {
+    return baseMessage;
+  }
+  return `${baseMessage} Cambio automatico: ${matchSwitchSummary(result.switchPlan)}.`;
+}
+
+function matchSwitchSummary(switchPlan = []) {
+  return switchPlan.map((item) =>
+    `${item.replacement.name} prende il posto di ${item.referee.name} su ${item.arena.name}`
+  ).join(" · ");
+}
+
+function unresolvedMatchSwitchMessage(unresolved = []) {
+  return unresolved.map((item) =>
+    `${item.playerName} è collegato all'arbitro ${item.referee.name}, ma ${item.arena.name} non ha una riserva libera per il cambio automatico`
+  ).join(" · ");
+}
+
+function applyMatchRefereeSwitchPlan(switchPlan = []) {
+  switchPlan.forEach((item) => {
+    item.arena.refereeId = item.replacement.id;
+    item.arena.refereeName = item.replacement.name;
+  });
+}
+
 function compactArenaLabel(arena) {
   const name = String(arena && arena.name || "").trim();
   const numericMatch = name.match(/(\d+)(?!.*\d)/);
@@ -103,6 +397,14 @@ function assignRefereeToArena(refereeId, arenaId, options = {}) {
   const arena = (tournament.arenas || []).find((item) => item.id === arenaId);
   const ref = (state.refereesRegistry || []).find((item) => item.id === refereeId);
   if (!arena || !ref) return false;
+  const playingConflict = refereePlayingConflict(ref.id);
+  if (playingConflict) {
+    setRefereeLineupStatus(
+      `${ref.name} è collegato al giocatore ${playingConflict.playerName} e sta già giocando su ${playingConflict.arenaName} (${playingConflict.matchLabel}).`,
+      true
+    );
+    return false;
+  }
   const replacingOther = arena.refereeId && arena.refereeId !== ref.id;
   if (replacingOther && !options.skipConfirm) {
     const ok = window.confirm(`Sostituire ${arena.refereeName || "l'arbitro attuale"} con ${ref.name} in ${arena.name}?`);
@@ -110,6 +412,7 @@ function assignRefereeToArena(refereeId, arenaId, options = {}) {
   }
   arena.refereeId = ref.id;
   arena.refereeName = ref.name;
+  setRefereeLineupStatus("");
   saveState(state);
   render();
   return true;
@@ -269,7 +572,8 @@ function renderRefereeLineup() {
     activeAssignments.push({
       arenaName: arena.name,
       refereeName: refereeName || "Arbitro non trovato",
-      status: arena.status
+      status: arena.status,
+      linkedPlayerName: ref ? linkedPlayerNameForReferee(ref.id) : ""
     });
   });
 
@@ -290,6 +594,7 @@ function renderRefereeLineup() {
         <strong>${assignment.refereeName}</strong>
         <div class="muted">${assignment.arenaName}</div>
         <div class="muted">Stato arena: ${statusLabel(assignment.status)}</div>
+        <div class="muted">Giocatore collegato: ${assignment.linkedPlayerName || "—"}</div>
       `;
       activeRefereeList.appendChild(row);
     });
@@ -302,6 +607,8 @@ function renderRefereeLineup() {
     reserveRefereeList.appendChild(empty);
   } else {
     reserves.forEach((ref) => {
+      const linkedPlayerName = linkedPlayerNameForReferee(ref.id);
+      const playingConflict = refereePlayingConflict(ref.id);
       const row = document.createElement("div");
       row.className = "list-row roster-item";
       const arenaOptions = (tournament.arenas || []).map((arena) => {
@@ -309,11 +616,13 @@ function renderRefereeLineup() {
       }).join("");
       row.innerHTML = `
         <strong>${ref.name}</strong>
+        <div class="muted">Giocatore collegato: ${linkedPlayerName || "—"}</div>
+        ${playingConflict ? `<div class="error">Sta giocando su ${playingConflict.arenaName}: ${playingConflict.matchLabel}</div>` : ""}
         <div class="reserve-assign-row">
-          <select class="reserve-arena-select" data-ref-id="${ref.id}">
+          <select class="reserve-arena-select" data-ref-id="${ref.id}" ${playingConflict ? "disabled" : ""}>
             ${arenaOptions || '<option value="">Nessuna arena disponibile</option>'}
           </select>
-          <button type="button" class="assign-reserve-btn" data-ref-id="${ref.id}" ${arenaOptions ? "" : "disabled"}>Assegna arena</button>
+          <button type="button" class="assign-reserve-btn" data-ref-id="${ref.id}" ${(arenaOptions && !playingConflict) ? "" : "disabled"}>Assegna arena</button>
         </div>
       `;
       reserveRefereeList.appendChild(row);
@@ -380,9 +689,15 @@ function generateRefereeLineup() {
     if (arena.refereeName) usedNames.add(String(arena.refereeName).trim().toLowerCase());
   });
 
-  const queue = availableRefs.filter((ref) =>
-    !usedIds.has(ref.id) && !usedNames.has(ref.name.trim().toLowerCase())
-  );
+  let skippedPlayingCount = 0;
+  const queue = availableRefs.filter((ref) => {
+    if (usedIds.has(ref.id) || usedNames.has(ref.name.trim().toLowerCase())) return false;
+    if (refereePlayingConflict(ref.id)) {
+      skippedPlayingCount += 1;
+      return false;
+    }
+    return true;
+  });
 
   let assignedCount = 0;
   (tournament.arenas || []).forEach((arena) => {
@@ -395,14 +710,20 @@ function generateRefereeLineup() {
   });
 
   if (assignedCount === 0) {
-    setRefereeLineupStatus("Nessuna arena libera da riempire oppure nessuna riserva disponibile.", true);
+    const skippedText = skippedPlayingCount > 0
+      ? ` ${skippedPlayingCount} arbitri saltati perché stanno giocando.`
+      : "";
+    setRefereeLineupStatus(`Nessuna arena libera da riempire oppure nessuna riserva disponibile.${skippedText}`, true);
     renderRefereeLineup();
     return;
   }
 
   saveState(state);
   render();
-  setRefereeLineupStatus(`Lista aggiornata: ${assignedCount} arbitri assegnati alle arene libere.`);
+  const skippedText = skippedPlayingCount > 0
+    ? ` ${skippedPlayingCount} riserve saltate perché stanno giocando.`
+    : "";
+  setRefereeLineupStatus(`Lista aggiornata: ${assignedCount} arbitri assegnati alle arene libere.${skippedText}`);
 }
 
 function challongePlaceholderName(name, participantId = "") {
@@ -511,6 +832,11 @@ function renderChallongeMatches() {
   }));
   matches.forEach((match) => {
     const names = resolveChallongeMatchNames(match, participantNameMap);
+    const switchAnalysis = analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]);
+    const blockedReason = unresolvedMatchSwitchMessage(switchAnalysis.unresolved);
+    const autoSwitchText = switchAnalysis.switchPlan.length > 0 && !blockedReason
+      ? `Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`
+      : "";
     const selectedArenaId = String(selectedChallongeArenaByMatch[String(match.id)] || "").trim();
     const selectedArena = arenaTargets.find((arena) => arena.id === selectedArenaId) || null;
     const row = document.createElement("div");
@@ -524,7 +850,7 @@ function renderChallongeMatches() {
             class="match-arena-btn${selectedArenaId === arena.id ? " is-selected" : ""}"
             data-match-id="${match.id}"
             data-arena-id="${arena.id}"
-            ${arena.ready ? "" : "disabled"}
+            ${arena.ready && !blockedReason ? "" : "disabled"}
           >
             <span class="light ${arena.status}" aria-hidden="true"></span>
             <span>
@@ -541,8 +867,10 @@ function renderChallongeMatches() {
       <div class="muted">${label} · Round ${match.round}</div>
       <div class="match-arena-actions">
         <div class="row" style="margin-top:0;">
-          <button class="load-challonge-match-btn" data-id="${match.id}" type="button" ${selectedArena && selectedArena.ready ? "" : "disabled"}>Assegna match a questa arena</button>
+          <button class="load-challonge-match-btn" data-id="${match.id}" type="button" ${selectedArena && selectedArena.ready && !blockedReason ? "" : "disabled"}>Assegna match a questa arena</button>
         </div>
+        ${blockedReason ? `<div class="error">${blockedReason}</div>` : ""}
+        ${autoSwitchText ? `<div class="muted">${autoSwitchText}</div>` : ""}
         <div class="muted">${selectedArenaText}</div>
         ${arenaButtons}
       </div>
@@ -647,12 +975,25 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   const matches = availableChallongeMatches();
   const selectedMatch = matchId
     ? matches.find((match) => String(match.id) === String(matchId))
-    : matches[0];
+    : matches.find((match) => {
+        const names = resolveChallongeMatchNames(match);
+        return analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]).unresolved.length === 0;
+      });
   if (!selectedMatch) {
-    setChallongeStatus("Nessun match Challonge disponibile da caricare.", true);
+    setChallongeStatus(matchId
+      ? "Nessun match Challonge disponibile da caricare."
+      : "Nessun match Challonge caricabile: i prossimi match richiedono una riserva libera per sostituire arbitri-giocatori.", true);
     return;
   }
   const names = resolveChallongeMatchNames(selectedMatch);
+  const switchAnalysis = analyzeMatchRefereeSwitches([names.player1Name, names.player2Name]);
+  if (switchAnalysis.unresolved.length > 0) {
+    setChallongeStatus(unresolvedMatchSwitchMessage(switchAnalysis.unresolved), true);
+    return;
+  }
+  if (switchAnalysis.switchPlan.length > 0) {
+    applyMatchRefereeSwitchPlan(switchAnalysis.switchPlan);
+  }
   arena.match = {
     p1: names.player1Name,
     p2: names.player2Name,
@@ -673,7 +1014,10 @@ function loadChallongeMatchIntoArena(matchId = "", forcedArenaId = "") {
   }
   saveState(state);
   render();
-  setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.`);
+  const switchText = switchAnalysis.switchPlan.length > 0
+    ? ` Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`
+    : "";
+  setChallongeStatus(`Match caricato su ${arena.name}: ${names.player1Name} vs ${names.player2Name}.${switchText}`);
 }
 
 async function reportChallongeResult(matchData, winnerChoice = {}) {
@@ -847,7 +1191,7 @@ function renderTournamentReferees() {
   if (!tournamentRefereeSelect || !tournamentRefereeList) return;
   tournamentRefereeSelect.innerHTML = "";
   tournamentRefereeList.innerHTML = "";
-  tournamentRefereeMessage.textContent = "";
+  setTournamentRefereeMessage("");
   const registry = (state.refereesRegistry || []).filter((ref) => ref.authUid);
   if (registry.length === 0) {
     const option = document.createElement("option");
@@ -873,6 +1217,8 @@ function renderTournamentReferees() {
     return;
   }
   entries.forEach((ref) => {
+    const linkedPlayerName = linkedPlayerNameForReferee(ref.id);
+    const playingConflict = refereePlayingConflict(ref.id);
     const levelInfo = getRefereeLevelInfo(ref.exp || 0);
     const progressTotal = Math.max(1, levelInfo.progressMax - levelInfo.progressMin);
     const progressValue = Math.min(progressTotal, Math.max(0, (ref.exp || 0) - levelInfo.progressMin));
@@ -885,11 +1231,24 @@ function renderTournamentReferees() {
     row.innerHTML = `
       <strong>${ref.name}</strong>
       <div class="muted">Account: ${ref.authUid ? "collegato" : "non collegato"}</div>
+      <div class="muted">Giocatore collegato: ${linkedPlayerName || "—"}</div>
       <div class="muted">Livello: Lv. ${levelInfo.level} - ${levelInfo.title}</div>
       <div class="muted">EXP: ${ref.exp || 0}</div>
       <div class="muted">${expToNextText}</div>
+      ${playingConflict ? `<div class="error">Sta giocando su ${playingConflict.arenaName}: ${playingConflict.matchLabel}</div>` : ""}
       <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${progressTotal}" aria-valuenow="${progressValue}">
         <div class="progress-bar" style="width:${progressPercent}%"></div>
+      </div>
+      <div class="ref-player-link-row" style="margin-top:8px;">
+        <input
+          class="ref-player-link-input"
+          data-id="${ref.id}"
+          list="playersList"
+          placeholder="Nome giocatore associato"
+          value="${escapeHtml(linkedPlayerName)}"
+        />
+        <button type="button" class="save-ref-player-link-btn" data-id="${ref.id}">Salva giocatore</button>
+        <button type="button" class="clear-ref-player-link-btn danger-btn" data-id="${ref.id}" ${linkedPlayerName ? "" : "disabled"}>Scollega</button>
       </div>
       <div class="row" style="margin-top:8px;">
         <button class="danger-btn remove-ref-btn" data-id="${ref.id}">Rimuovi</button>
@@ -922,12 +1281,10 @@ if (addTournamentRefereeBtn) {
     if (!refId) return;
     if (!Array.isArray(tournament.refereeIds)) tournament.refereeIds = [];
     if (tournament.refereeIds.includes(refId)) {
-      tournamentRefereeMessage.textContent = "Arbitro già associato al torneo.";
-      tournamentRefereeMessage.classList.add("error");
+      setTournamentRefereeMessage("Arbitro già associato al torneo.", true);
       return;
     }
-    tournamentRefereeMessage.textContent = "";
-    tournamentRefereeMessage.classList.remove("error");
+    setTournamentRefereeMessage("");
     tournament.refereeIds.push(refId);
     saveState(state);
     render();
@@ -953,8 +1310,17 @@ setMatchBtn.addEventListener("click", () => {
   const p1 = player1Input.value.trim();
   const p2 = player2Input.value.trim();
   if (!p1 || !p2) return;
+  const switchAnalysis = analyzeMatchRefereeSwitches([p1, p2]);
+  if (switchAnalysis.unresolved.length > 0) {
+    matchMessage.textContent = unresolvedMatchSwitchMessage(switchAnalysis.unresolved);
+    matchMessage.classList.add("error");
+    return;
+  }
   matchMessage.textContent = "";
   matchMessage.classList.remove("error");
+  if (switchAnalysis.switchPlan.length > 0) {
+    applyMatchRefereeSwitchPlan(switchAnalysis.switchPlan);
+  }
   arena.match = { p1, p2, source: "manual" };
   arena.selectedWinner = "";
   arena.selectedWinnerId = "";
@@ -963,6 +1329,10 @@ setMatchBtn.addEventListener("click", () => {
   arena.coinTossResult = "";
   saveState(state);
   render();
+  if (switchAnalysis.switchPlan.length > 0) {
+    matchMessage.textContent = `Cambio automatico: ${matchSwitchSummary(switchAnalysis.switchPlan)}.`;
+    matchMessage.classList.remove("error");
+  }
   player1Input.value = "";
   player2Input.value = "";
 });
@@ -1231,13 +1601,65 @@ if (tournamentRefereeList) {
   tournamentRefereeList.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (!target.classList.contains("remove-ref-btn")) return;
     if (!tournament) return;
     const refId = target.dataset.id;
     if (!refId) return;
-    tournament.refereeIds = (tournament.refereeIds || []).filter((id) => id !== refId);
+    if (target.classList.contains("remove-ref-btn")) {
+      tournament.refereeIds = (tournament.refereeIds || []).filter((id) => id !== refId);
+      tournament.refereePlayerLinks = tournamentRefereePlayerLinks().filter((link) => link.refereeId !== refId);
+      saveState(state);
+      render();
+      return;
+    }
+    if (target.classList.contains("save-ref-player-link-btn")) {
+      const row = target.closest(".list-row");
+      const input = row ? row.querySelector(".ref-player-link-input") : null;
+      const nextName = input instanceof HTMLInputElement ? input.value.trim() : "";
+      const result = updateRefereePlayerLink(refId, nextName);
+      if (!result.ok) {
+        setTournamentRefereeMessage(result.error || "Impossibile salvare il giocatore collegato.", true);
+        return;
+      }
+      saveState(state);
+      render();
+      setTournamentRefereeMessage(refereePlayerLinkSuccessMessage(result));
+      return;
+    }
+    if (target.classList.contains("clear-ref-player-link-btn")) {
+      const result = updateRefereePlayerLink(refId, "");
+      if (!result.ok) {
+        setTournamentRefereeMessage("Impossibile scollegare il giocatore.", true);
+        return;
+      }
+      saveState(state);
+      render();
+      setTournamentRefereeMessage("Giocatore scollegato.");
+    }
+  });
+}
+
+if (tournamentRefereeList) {
+  tournamentRefereeList.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.classList.contains("ref-player-link-input") || event.key !== "Enter") return;
+    event.preventDefault();
+    const refId = target.dataset.id;
+    if (!refId) return;
+    const result = updateRefereePlayerLink(refId, target.value.trim());
+    if (!result.ok) {
+      setTournamentRefereeMessage(result.error || "Impossibile salvare il giocatore collegato.", true);
+      return;
+    }
     saveState(state);
     render();
+    setTournamentRefereeMessage(refereePlayerLinkSuccessMessage(result));
+  });
+}
+
+if (toggleRefereePanelBtn) {
+  toggleRefereePanelBtn.addEventListener("click", () => {
+    setRefereePanelCollapsed(!(refereePanelBody && refereePanelBody.hidden));
   });
 }
 
@@ -1252,6 +1674,7 @@ requireRole({
   message: matchMessage,
   onUser(user) {
     currentUser = user;
+    restoreRefereePanelState();
     render();
   }
 });
@@ -1273,6 +1696,8 @@ function statusLabel(status) {
   if (status === "expired") return "Scaduta";
   return "Libera";
 }
+
+restoreRefereePanelState();
 
 function renderPlayers() {
   if (!tournament) return;
