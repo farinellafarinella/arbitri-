@@ -431,6 +431,31 @@ async function challongeRequest(pathname, options = {}) {
   throw error;
 }
 
+async function fetchMissingChallongeParticipants(encodedRef, participants, matches) {
+  const knownParticipantIds = new Set(
+    (Array.isArray(participants) ? participants : [])
+      .map((participant) => String(participant && participant.id || "").trim())
+      .filter(Boolean)
+  );
+  const missingIds = Array.from(new Set(
+    (Array.isArray(matches) ? matches : [])
+      .flatMap((match) => [String(match && match.player1_id || "").trim(), String(match && match.player2_id || "").trim()])
+      .filter((participantId) => participantId && !knownParticipantIds.has(participantId))
+  ));
+  if (missingIds.length === 0) return [];
+
+  const settled = await Promise.allSettled(missingIds.map(async (participantId) => {
+    const payload = await challongeRequest(
+      `/tournaments/${encodedRef}/participants/${encodeURIComponent(participantId)}`
+    );
+    return payload && payload.participant ? payload.participant : null;
+  }));
+
+  return settled
+    .filter((result) => result.status === "fulfilled" && result.value && result.value.id)
+    .map((result) => result.value);
+}
+
 async function fetchChallongeTournamentBundle(tournamentRef) {
   const encodedRef = encodeURIComponent(tournamentRef);
   const [tournamentPayload, participantsPayload, matchesPayload] = await Promise.all([
@@ -438,10 +463,13 @@ async function fetchChallongeTournamentBundle(tournamentRef) {
     challongeRequest(`/tournaments/${encodedRef}/participants`),
     challongeRequest(`/tournaments/${encodedRef}/matches`)
   ]);
+  const participants = unwrapChallongeList(participantsPayload, "participant");
+  const matches = unwrapChallongeList(matchesPayload, "match");
+  const extraParticipants = await fetchMissingChallongeParticipants(encodedRef, participants, matches);
   return {
     tournament: tournamentPayload && tournamentPayload.tournament ? tournamentPayload.tournament : {},
-    participants: unwrapChallongeList(participantsPayload, "participant"),
-    matches: unwrapChallongeList(matchesPayload, "match")
+    participants: [...participants, ...extraParticipants],
+    matches
   };
 }
 
