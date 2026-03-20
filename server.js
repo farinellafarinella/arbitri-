@@ -289,23 +289,23 @@ function inferSwissFirstRoundPlayerMap(participants, matches) {
     .sort((left, right) => Number(left.seed) - Number(right.seed));
   const safeMatches = (Array.isArray(matches) ? matches : [])
     .filter((match) => match && match.player1_id && match.player2_id);
-  if (seededParticipants.length < 2 || safeMatches.length === 0) return new Map();
-  if (safeMatches.some((match) => Number(match.round) !== 1)) return new Map();
+  const firstRoundMatches = safeMatches.filter((match) => Number(match.round) === 1);
+  if (seededParticipants.length < 2 || firstRoundMatches.length === 0) return new Map();
 
   const matchPlayerIds = Array.from(new Set(
-    safeMatches.flatMap((match) => [String(match.player1_id), String(match.player2_id)])
+    firstRoundMatches.flatMap((match) => [String(match.player1_id), String(match.player2_id)])
   )).sort();
   const participantCount = seededParticipants.length;
   const expectedMatchCount = Math.floor(participantCount / 2);
-  if (safeMatches.length !== expectedMatchCount) return new Map();
+  if (firstRoundMatches.length !== expectedMatchCount) return new Map();
   if (matchPlayerIds.length !== participantCount && matchPlayerIds.length !== participantCount - 1) return new Map();
 
-  const half = safeMatches.length;
+  const half = firstRoundMatches.length;
   const expectedPairs = [];
   for (let index = 0; index < half; index += 1) {
     expectedPairs.push(normalizePairKey(matchPlayerIds[index], matchPlayerIds[index + half]));
   }
-  const actualPairs = safeMatches
+  const actualPairs = firstRoundMatches
     .map((match) => normalizePairKey(match.player1_id, match.player2_id))
     .sort();
   if (JSON.stringify(expectedPairs.sort()) !== JSON.stringify(actualPairs)) {
