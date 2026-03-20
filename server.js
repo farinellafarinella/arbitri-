@@ -145,6 +145,17 @@ function normalizePairKey(left, right) {
   return [String(left || "").trim(), String(right || "").trim()].sort().join("::");
 }
 
+function sortNumericStringIds(list) {
+  return (Array.isArray(list) ? list : []).slice().sort((left, right) => {
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+      return leftNumber - rightNumber;
+    }
+    return String(left).localeCompare(String(right), undefined, { numeric: true });
+  });
+}
+
 function buildRoundRobinSchedule(size) {
   if (!Number.isInteger(size) || size < 2) return [];
   const totalSlots = size % 2 === 0 ? size : size + 1;
@@ -292,9 +303,9 @@ function inferSwissFirstRoundPlayerMap(participants, matches) {
   const firstRoundMatches = safeMatches.filter((match) => Number(match.round) === 1);
   if (seededParticipants.length < 2 || firstRoundMatches.length === 0) return new Map();
 
-  const matchPlayerIds = Array.from(new Set(
+  const matchPlayerIds = sortNumericStringIds(Array.from(new Set(
     firstRoundMatches.flatMap((match) => [String(match.player1_id), String(match.player2_id)])
-  )).sort();
+  )));
   const participantCount = seededParticipants.length;
   const expectedMatchCount = Math.floor(participantCount / 2);
   if (firstRoundMatches.length !== expectedMatchCount) return new Map();
@@ -318,6 +329,22 @@ function inferSwissFirstRoundPlayerMap(participants, matches) {
     if (!participant) return;
     inferred.set(String(matchPlayerId), participant);
   });
+
+  // With an odd number of players, Challonge can omit the bye player from round 1
+  // and only introduce that internal player id from round 2 onward.
+  if (matchPlayerIds.length === participantCount - 1) {
+    const mappedParticipantIds = new Set(Array.from(inferred.values()).map((participant) => String(participant && participant.id || "").trim()));
+    const missingParticipants = seededParticipants.filter((participant) => !mappedParticipantIds.has(String(participant.id)));
+    const allMatchPlayerIds = sortNumericStringIds(Array.from(new Set(
+      safeMatches.flatMap((match) => [String(match && match.player1_id || ""), String(match && match.player2_id || "")])
+        .filter(Boolean)
+    )));
+    const unseenMatchPlayerIds = allMatchPlayerIds.filter((matchPlayerId) => !inferred.has(String(matchPlayerId)));
+    if (missingParticipants.length === 1 && unseenMatchPlayerIds.length === 1) {
+      inferred.set(String(unseenMatchPlayerIds[0]), missingParticipants[0]);
+    }
+  }
+
   return inferred;
 }
 
